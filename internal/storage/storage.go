@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -15,7 +16,7 @@ type Storage struct {
 	db *sql.DB // Закрытый пул с одним соединением.
 }
 
-// Open открывает файловую БД и проверяет совместимость схемы.
+// Open открывает файловую БД, проверяет совместимость схемы и возможность записи.
 func Open(ctx context.Context, filename string) (*Storage, error) {
 	if filename == "" || filename == ":memory:" || strings.HasPrefix(filename, "file:") {
 		return nil, invalid("database path")
@@ -58,6 +59,9 @@ func Open(ctx context.Context, filename string) (*Storage, error) {
 	if err == nil {
 		err = s.initialize(ctx)
 	}
+	if err == nil {
+		err = s.checkWritable(ctx)
+	}
 	if err != nil {
 		db.Close()
 		return nil, protect(err)
@@ -67,6 +71,19 @@ func Open(ctx context.Context, filename string) (*Storage, error) {
 
 // Close закрывает соединения по контракту database/sql.
 func (s *Storage) Close() error { return protect(s.db.Close()) }
+
+// checkWritable проверяет запись и создание журнала реальной транзакцией SQLite.
+// Повторная запись текущей версии не меняет схему и пользовательские данные.
+func (s *Storage) checkWritable(ctx context.Context) error {
+	return s.withTx(ctx, func(tx *sql.Tx) error {
+		var version int
+		if err := tx.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, "PRAGMA user_version="+strconv.Itoa(version))
+		return err
+	})
+}
 
 func (s *Storage) checkPragmas(ctx context.Context) error {
 	for name, want := range map[string]string{"foreign_keys": "1", "journal_mode": "delete", "synchronous": "3", "busy_timeout": "5000"} {
