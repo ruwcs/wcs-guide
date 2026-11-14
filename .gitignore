@@ -1,0 +1,26 @@
+# Локальная конфигурация и секреты
+.env
+.env.*
+!.env.example
+/secrets/
+*.session
+*.session-*
+
+
+# Рабочие данные, снимки и резервные копии
+/data/
+/backups/
+/snapshots/
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+
+# Логи, сборка и временные файлы
+*.log
+/bin/
+/dist/
+/tmp/
+.DS_Store
