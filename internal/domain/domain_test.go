@@ -212,6 +212,7 @@ func TestSafeLogging(t *testing.T) {
 	b.Import.Rules.Start.Text = secret
 	b.Prepared = &PreparedContent{Content: secret}
 	p := page()
+	p.MachineContext = secret
 	p.Title = secret
 	p.Path = secret
 	p.Blocks = []Block{b}
@@ -238,4 +239,24 @@ func TestSafeLogging(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestPageMachineContext(t *testing.T) {
+	for _, text := range []string{"", "WCS — West Coast Swing.\n한국 <контекст> & \"пример\""} {
+		p := page()
+		p.MachineContext = text
+		if err := p.Validate(); err != nil {
+			t.Fatal(err)
+		}
+		if err := p.Publish(instant()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	p := page()
+	p.MachineContext = string([]byte{255})
+	requireInvalid(t, p.Validate())
+	p = page()
+	p.MachineContext = "контекст"
+	p.Title = ""
+	requireInvalid(t, p.Publish(instant()))
 }

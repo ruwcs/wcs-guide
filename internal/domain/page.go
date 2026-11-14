@@ -33,16 +33,17 @@ func (s PageStatus) String() string {
 
 // Page содержит упорядоченные блоки независимо от URL-иерархии.
 type Page struct {
-	ID          int64      // Идентификатор страницы для связи с блоками.
-	Path        string     // Канонический незакодированный локальный адрес страницы.
-	Title       string     // Содержательный заголовок страницы.
-	Description string     // Краткое описание материала.
-	Language    string     // Основной язык содержимого.
-	Status      PageStatus // Состояние публичности страницы.
-	CreatedAt   time.Time  // Время создания страницы.
-	UpdatedAt   time.Time  // Время редакторского изменения страницы или её статуса.
-	PublishedAt time.Time  // Последняя явная публикация; ноль — не публиковалась.
-	Blocks      []Block    // Блоки в порядке отображения на странице.
+	ID             int64      // Идентификатор страницы для связи с блоками.
+	Path           string     // Канонический незакодированный локальный адрес страницы.
+	Title          string     // Единый заголовок страницы и её представлений.
+	Description    string     // Краткое текстовое описание для метаданных и каталогов.
+	MachineContext string     // Дополнительный публичный контекст для машинных потребителей.
+	Language       string     // Основной язык содержимого.
+	Status         PageStatus // Состояние публичности страницы.
+	CreatedAt      time.Time  // Время создания страницы.
+	UpdatedAt      time.Time  // Время редакторского изменения страницы или её статуса.
+	PublishedAt    time.Time  // Последняя явная публикация; ноль — не публиковалась.
+	Blocks         []Block    // Блоки в порядке отображения на странице.
 }
 
 // Validate проверяет страницу и её блоки без проверки уникальности адреса на сайте.
@@ -50,7 +51,7 @@ func (p Page) Validate() error {
 	if p.ID < 0 || (p.Status != PageDraft && p.Status != PagePublished) {
 		return invalid("Page.identity")
 	}
-	for _, s := range []string{p.Path, p.Title, p.Description, p.Language} {
+	for _, s := range []string{p.Path, p.Title, p.Description, p.MachineContext, p.Language} {
 		if !utf8.ValidString(s) {
 			return invalid("Page.text")
 		}
