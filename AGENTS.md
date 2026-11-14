@@ -102,5 +102,6 @@
 | Импорт, обработка, ошибки, права на контент | [content-pipeline.md](docs/content-pipeline.md) |
 | Passkeys, роли, сессии, восстановление | [auth.md](docs/auth.md) |
 | Go, зависимости, Git и проверки | [development.md](docs/development.md) |
+| Production, Docker, Traefik | [operations.md](docs/operations.md) |
 | Релизы, AGPL, GHCR и исходники версии | [releases.md](docs/releases.md) |
 | MVP и отложенные функции | [roadmap.md](docs/roadmap.md) |
