@@ -23,6 +23,7 @@ type FetchToken struct {
 	SyncRevision int64 // Ожидаемая редакция получения.
 }
 
+// sourceColumns задаёт единый порядок столбцов при чтении источника.
 const sourceColumns = "id,name,type,external_ref,fetch_params,update_interval_ns,auto_refresh,publication_blocked,last_attempt_at,last_success_at,last_error,edit_revision,sync_revision"
 
 func getSource(ctx context.Context, tx *sql.Tx, id int64) (SourceRecord, error) {

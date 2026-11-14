@@ -14,6 +14,7 @@ import (
 
 func TestMachineContextLifecycle(t *testing.T) {
 	store, path := openTest(t)
+	// contextText проверяет сохранение Unicode, переносов и специальных символов.
 	const contextText = "WCS — West Coast Swing.\n한국 <материал> & \"пояснение\""
 	source := makeSource(t, store, "metadata")
 	fetch(t, store, source.Source.ID, "A", clock())

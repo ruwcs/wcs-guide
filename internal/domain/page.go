@@ -120,4 +120,5 @@ func (p Page) LogValue() slog.Value {
 	return slog.GroupValue(slog.Int64("id", p.ID), slog.String("status", p.Status.String()), slog.Int("block_count", len(p.Blocks)))
 }
 
+// Проверка контракта безопасного логирования сущности при компиляции.
 var _ slog.LogValuer = Page{}

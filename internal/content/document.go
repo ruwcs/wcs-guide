@@ -49,13 +49,20 @@ type Span struct {
 }
 
 var (
+	// ErrInvalidDocument означает некорректный текст или диапазоны документа.
 	ErrInvalidDocument = errors.New("content: некорректный документ")
-	ErrUnsupported     = errors.New("content: неподдерживаемое представление")
-	ErrLimitExceeded   = errors.New("content: превышено ограничение")
-	ErrAnchorNotFound  = errors.New("content: якорь не найден")
+	// ErrUnsupported означает неподдерживаемое представление содержимого.
+	ErrUnsupported = errors.New("content: неподдерживаемое представление")
+	// ErrLimitExceeded означает превышение допустимого объёма или сложности.
+	ErrLimitExceeded = errors.New("content: превышено ограничение")
+	// ErrAnchorNotFound означает отсутствие заданного якоря в тексте.
+	ErrAnchorNotFound = errors.New("content: якорь не найден")
+	// ErrAnchorAmbiguous означает несколько совпадений заданного якоря.
 	ErrAnchorAmbiguous = errors.New("content: неоднозначный якорь")
-	ErrAnchorOrder     = errors.New("content: неверный порядок границ")
-	ErrEmptyResult     = errors.New("content: пустой результат")
+	// ErrAnchorOrder означает недопустимый порядок строк якорей.
+	ErrAnchorOrder = errors.New("content: неверный порядок границ")
+	// ErrEmptyResult защищает от публикации неожиданно пустого извлечения.
+	ErrEmptyResult = errors.New("content: пустой результат")
 )
 
 // Normalize проверяет текст и копирует диапазоны, не меняя координаты и содержимое.

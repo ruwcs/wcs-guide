@@ -6,6 +6,7 @@ import (
 	"time"
 )
 
+// timeFormat сохраняет UTC с наносекундной точностью и лексикографическим порядком.
 const timeFormat = "2006-01-02T15:04:05.000000000Z"
 
 func stamp(t time.Time) any {

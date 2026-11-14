@@ -10,6 +10,8 @@ import (
 	"strings"
 )
 
+// migrations содержит встроенные SQL-файлы последовательных версий схемы.
+//
 //go:embed migrations/*.sql
 var migrations embed.FS
 

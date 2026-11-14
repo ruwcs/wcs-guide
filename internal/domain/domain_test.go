@@ -207,6 +207,7 @@ func TestBlockResults(t *testing.T) {
 }
 
 func TestSafeLogging(t *testing.T) {
+	// secret обнаруживает случайный вывод содержимого сущностей в журнал.
 	const secret = "CONFIDENTIAL_MARKER"
 	b := imported()
 	b.Import.Rules.Start.Text = secret

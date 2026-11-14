@@ -137,4 +137,5 @@ func (b Block) LogValue() slog.Value {
 	return slog.GroupValue(attrs...)
 }
 
+// Проверка контракта безопасного логирования сущности при компиляции.
 var _ slog.LogValuer = Block{}

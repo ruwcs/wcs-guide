@@ -117,4 +117,5 @@ func (s Source) LogValue() slog.Value {
 	return slog.GroupValue(slog.Int64("id", s.ID), slog.String("type", string(s.Type)), slog.Bool("auto_refresh", s.AutoRefresh), slog.Bool("publication_blocked", s.PublicationBlocked), slog.String("sync_status", string(s.Sync.Status())))
 }
 
+// Проверка контракта безопасного логирования сущности при компиляции.
 var _ slog.LogValuer = Source{}

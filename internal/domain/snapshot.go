@@ -31,4 +31,5 @@ func (s Snapshot) LogValue() slog.Value {
 	return slog.GroupValue(slog.Int64("id", s.ID), slog.Int64("source_id", s.SourceID), slog.Int("raw_size", len(s.RawContent)))
 }
 
+// Проверка контракта безопасного логирования сущности при компиляции.
 var _ slog.LogValuer = Snapshot{}

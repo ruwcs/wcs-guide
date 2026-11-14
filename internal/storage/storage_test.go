@@ -15,6 +15,7 @@ import (
 	"github.com/ruwcs/wcs-guide/internal/domain"
 )
 
+// ctx используется для тестовых операций без отмены.
 var ctx = context.Background()
 
 func clock() time.Time {
