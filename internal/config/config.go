@@ -7,22 +7,32 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 )
 
 // Config — конфигурация приложения.
 type Config struct {
-	BaseURL             url.URL // Адрес сайта, например "https://wcs.guide".
-	DBPath              string  // Путь к файлу базы данных.
-	TelegramAPIID       int     // Идентификатор приложения Telegram.
-	TelegramAPIHash     string  // Секрет приложения Telegram.
-	TelegramBotToken    string  // Токен бота Telegram.
-	TelegramSessionPath string  // Путь к файлу сессии Telegram.
+	RefreshInterval     time.Duration // Интервал автоматического обновления источников.
+	BaseURL             url.URL       // Адрес сайта, например "https://wcs.guide".
+	DBPath              string        // Путь к файлу базы данных.
+	TelegramAPIID       int           // Идентификатор приложения Telegram.
+	TelegramAPIHash     string        // Секрет приложения Telegram.
+	TelegramBotToken    string        // Токен бота Telegram.
+	TelegramSessionPath string        // Путь к файлу сессии Telegram.
 }
 
 // Load загружает конфигурацию.
 func Load(lookup func(string) (string, bool)) (Config, error) {
 	var cfg Config
+	cfg.RefreshInterval = defaultRefreshInterval
+	if raw, ok := lookup("REFRESH_INTERVAL"); ok {
+		minutes, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || minutes <= 0 || minutes > int64((1<<63-1)/time.Minute) {
+			return cfg, fmt.Errorf("REFRESH_INTERVAL: требуется положительное целое число минут")
+		}
+		cfg.RefreshInterval = time.Duration(minutes) * time.Minute
+	}
 	required := func(name string) (string, error) {
 		value, ok := lookup(name)
 		if !ok || strings.TrimSpace(value) == "" {
@@ -84,3 +94,6 @@ func LoadDBPath(lookup func(string) (string, bool)) (string, error) {
 	}
 	return value, nil
 }
+
+// defaultRefreshInterval — интервал обновления по умолчанию.
+const defaultRefreshInterval = 10 * time.Minute

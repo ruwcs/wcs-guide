@@ -52,9 +52,7 @@ func (app *App) Close() error { return app.Store.Close() }
 func (app *App) Run(ctx context.Context) error {
 	cfg, logger, store := app.cfg, app.logger, app.Store
 	ctx, cancel := context.WithCancel(ctx)
-	done := make(chan struct{})
-	go func() { defer close(done); app.Telegram.Run(ctx, logger) }()
-	defer func() { cancel(); <-done }()
+	defer cancel()
 	handler, err := web.New(ctx, store, cfg.BaseURL, config.Version(), logger)
 	if err != nil {
 		return err
@@ -63,6 +61,17 @@ func (app *App) Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("запуск HTTP: %w", err)
 	}
+	telegramCtx, stopTelegram := context.WithCancel(context.WithoutCancel(ctx))
+	telegramDone := make(chan struct{})
+	refreshDone := make(chan struct{})
+	go func() { defer close(telegramDone); app.Telegram.Run(telegramCtx, logger) }()
+	go func() {
+		defer close(refreshDone)
+		if app.Telegram.WaitReady(ctx) == nil {
+			app.Importer.Run(ctx, cfg.RefreshInterval, logger)
+		}
+	}()
+	defer func() { cancel(); <-refreshDone; stopTelegram(); <-telegramDone }()
 	server := newServer(logger, handler)
 	logger.Info("[http] listening", "addr", httpAddr)
 	return serve(ctx, server, listener, shutdownTimeout, logger)

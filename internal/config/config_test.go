@@ -14,6 +14,9 @@ func TestLoad(t *testing.T) {
 	}{{"http://localhost:8080", "./data/test.db", true}, {"https://wcs.guide/", "/data/test.db", true}, {"https://wcs.guide:65536", "test.db", false}, {"HTTP://localhost:8080", "test.db", true}, {"", "a.db", false}, {"https://wcs.guide", "", false}, {"https://user:SECRET@wcs.guide", "a.db", false}, {"https://wcs.guide/sub", "a.db", false}, {"https://wcs.guide?x=1", "a.db", false}, {"https://wcs.guide#", "a.db", false}, {"https://wcs.guide", "file:a.db", false}, {"https://wcs.guide", ":memory:", false}, {"localhost:8080", "a.db", false}}
 	for _, tc := range cases {
 		cfg, err := Load(func(name string) (string, bool) {
+			if name == "REFRESH_INTERVAL" {
+				return "", false
+			}
 			if name == "BASE_URL" {
 				return tc.base, true
 			}
@@ -67,5 +70,25 @@ func TestRequiredConfiguration(t *testing.T) {
 			t.Fatal("утечка секрета")
 		}
 		values[name] = original
+	}
+}
+
+// TestRefreshInterval проверяет интервал обновления из окружения.
+func TestRefreshInterval(t *testing.T) {
+	for _, value := range []string{"absent", "10", "1", "42", "", "0", "-1", "1.5", "text", "999999999999999999999999", "153722868"} {
+		t.Run(value, func(t *testing.T) {
+			values := map[string]string{"BASE_URL": "http://localhost:8080", "DB_PATH": "test.db", "TELEGRAM_API_ID": "1", "TELEGRAM_API_HASH": strings.Repeat("a", 32), "TELEGRAM_BOT_TOKEN": "1:token", "TELEGRAM_SESSION_PATH": "session"}
+			if value != "absent" {
+				values["REFRESH_INTERVAL"] = value
+			}
+			cfg, err := Load(func(name string) (string, bool) { v, ok := values[name]; return v, ok })
+			valid := value == "absent" || value == "10" || value == "1" || value == "42"
+			if (err == nil) != valid {
+				t.Fatal(err)
+			}
+			if value == "absent" && cfg.RefreshInterval != defaultRefreshInterval {
+				t.Fatal(cfg.RefreshInterval)
+			}
+		})
 	}
 }
