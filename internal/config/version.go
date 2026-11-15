@@ -1,9 +1,9 @@
 package config
 
-// version назначается при сборке через linker flags; пустое значение означает dev.
+// version — версия приложения, задаётся на этапе сборки.
 var version string
 
-// Version возвращает назначенную через linker flags версию или dev.
+// Version возвращает версию приложения.
 func Version() string {
 	if version == "" {
 		return "dev"

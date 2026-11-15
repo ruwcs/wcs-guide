@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// TestLoad проверяет загрузку конфигурации окружения.
 func TestLoad(t *testing.T) {
 	cases := []struct {
 		base  string // Внешний адрес для проверки.
@@ -16,7 +17,10 @@ func TestLoad(t *testing.T) {
 			if name == "BASE_URL" {
 				return tc.base, true
 			}
-			return tc.path, true
+			if name == "DB_PATH" {
+				return tc.path, true
+			}
+			return map[string]string{"TELEGRAM_API_ID": "123", "TELEGRAM_API_HASH": strings.Repeat("a", 32), "TELEGRAM_BOT_TOKEN": "7:SECRET", "TELEGRAM_SESSION_PATH": "test.session"}[name], true
 		})
 		if (err == nil) != tc.valid {
 			t.Fatalf("некорректный результат: %v", err)
@@ -32,6 +36,8 @@ func TestLoad(t *testing.T) {
 		t.Fatal("нет обязательной переменной")
 	}
 }
+
+// TestBuildVersion проверяет версию приложения.
 func TestBuildVersion(t *testing.T) {
 	originalVersion := version
 	defer func() { version = originalVersion }()
@@ -42,5 +48,24 @@ func TestBuildVersion(t *testing.T) {
 	version = "test-build"
 	if Version() != "test-build" {
 		t.Fatal("потеряны значения сборки")
+	}
+}
+
+// TestRequiredConfiguration проверяет обязательные параметры конфигурации.
+func TestRequiredConfiguration(t *testing.T) {
+	values := map[string]string{"BASE_URL": "https://wcs.guide", "TELEGRAM_SESSION_PATH": "test.session", "DB_PATH": "./test.db", "TELEGRAM_API_ID": "123", "TELEGRAM_API_HASH": strings.Repeat("a", 32), "TELEGRAM_BOT_TOKEN": "7:TOKEN_SECRET"}
+	lookup := func(name string) (string, bool) { value, ok := values[name]; return value, ok }
+	if _, err := Load(lookup); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"TELEGRAM_API_ID", "TELEGRAM_API_HASH", "TELEGRAM_BOT_TOKEN", "DB_PATH", "BASE_URL", "TELEGRAM_SESSION_PATH"} {
+		original := values[name]
+		values[name] = ""
+		if _, err := Load(lookup); err == nil {
+			t.Fatal(name)
+		} else if strings.Contains(err.Error(), "SECRET") {
+			t.Fatal("утечка секрета")
+		}
+		values[name] = original
 	}
 }

@@ -8,15 +8,28 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/ruwcs/wcs-guide/internal/config"
+	"github.com/ruwcs/wcs-guide/internal/storage"
+	"github.com/ruwcs/wcs-guide/internal/web"
 )
 
+// TestHealth проверяет ответ проверки работоспособности.
 func TestHealth(t *testing.T) {
-	handler := newServer(slog.Default()).Handler
+	store, err := storage.Open(context.Background(), filepath.Join(t.TempDir(), "health.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	base, _ := url.Parse("http://localhost:8080")
+	handler, err := web.New(context.Background(), store, *base, "dev", slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, method := range []string{"GET", "HEAD"} {
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, httptest.NewRequest(method, "/healthz", nil))
@@ -31,7 +44,7 @@ func TestHealth(t *testing.T) {
 			t.Fatal(response.Body.String())
 		}
 	}
-	for _, path := range []string{"/", "/unknown"} {
+	for _, path := range []string{"/unknown"} {
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, httptest.NewRequest("GET", path, nil))
 		if response.Code != 404 {
@@ -39,13 +52,15 @@ func TestHealth(t *testing.T) {
 		}
 	}
 }
+
+// TestShutdown проверяет штатное завершение веб-сервера.
 func TestShutdown(t *testing.T) {
 	for _, timeout := range []bool{false, true} {
 		listener, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
 			t.Fatal(err)
 		}
-		server := newServer(slog.Default())
+		server := newServer(slog.Default(), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) }))
 		started := make(chan struct{})
 		if timeout {
 			server.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { close(started); <-r.Context().Done() })
@@ -83,9 +98,11 @@ func TestShutdown(t *testing.T) {
 		<-requestDone
 	}
 }
+
+// TestStartupFailure проверяет ошибки инициализации приложения.
 func TestStartupFailure(t *testing.T) {
-	cfg := config.Config{DBPath: filepath.Join(t.TempDir(), "missing", "test.db")}
-	if err := Run(context.Background(), cfg, slog.Default()); err == nil {
+	cfg := config.Config{TelegramSessionPath: filepath.Join(t.TempDir(), "bot.session"), DBPath: filepath.Join(t.TempDir(), "missing", "test.db")}
+	if _, err := New(context.Background(), cfg, slog.Default()); err == nil {
 		t.Fatal("ожидалась ошибка хранилища")
 	}
 	listener, err := net.Listen("tcp", httpAddr)
@@ -94,7 +111,15 @@ func TestStartupFailure(t *testing.T) {
 	}
 	defer listener.Close()
 	cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
-	if err := Run(context.Background(), cfg, slog.Default()); err == nil {
+	application, err := New(context.Background(), cfg, slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer application.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := application.Run(ctx); err == nil {
 		t.Fatal("ожидалась ошибка занятого порта")
 	}
+
 }

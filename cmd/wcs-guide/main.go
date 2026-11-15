@@ -11,11 +11,14 @@ import (
 	"github.com/ruwcs/wcs-guide/internal/config"
 )
 
+// main запускает программу.
 func main() { os.Exit(run()) }
+
+// run выполняет основной сценарий программы.
 func run() int {
 	logger := slog.Default()
 	if len(os.Args) != 1 {
-		logger.Error("[app] аргументы не поддерживаются")
+		logger.Error("[app] команды не поддерживаются")
 		return 2
 	}
 	cfg, err := config.Load(os.LookupEnv)
@@ -25,7 +28,13 @@ func run() int {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := app.Run(ctx, cfg, logger); err != nil {
+	application, err := app.New(ctx, cfg, logger)
+	if err != nil {
+		logger.Error("[app] ошибка инициализации", "error", err)
+		return 1
+	}
+	defer application.Close()
+	if err := application.Run(ctx); err != nil {
 		logger.Error("[app] завершение с ошибкой", "error", err)
 		return 1
 	}

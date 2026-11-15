@@ -13,6 +13,7 @@ import (
 	"github.com/ruwcs/wcs-guide/internal/storage"
 )
 
+// TestStartupArgumentsAndConfiguration проверяет аргументы запуска и ошибки конфигурации.
 func TestStartupArgumentsAndConfiguration(t *testing.T) {
 	original := os.Args
 	defer func() { os.Args = original }()
@@ -34,6 +35,7 @@ func TestStartupArgumentsAndConfiguration(t *testing.T) {
 	}
 }
 
+// TestStartupReadOnlyDatabase проверяет отказ запуска с недоступной для записи БД.
 func TestStartupReadOnlyDatabase(t *testing.T) {
 	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
 		t.Skip("проверка POSIX-прав требует непривилегированного пользователя")
@@ -61,6 +63,10 @@ func TestStartupReadOnlyDatabase(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
 	t.Setenv("BASE_URL", "http://localhost:8080")
 	t.Setenv("DB_PATH", path)
+	t.Setenv("TELEGRAM_API_ID", "123")
+	t.Setenv("TELEGRAM_API_HASH", strings.Repeat("a", 32))
+	t.Setenv("TELEGRAM_BOT_TOKEN", "7:SECRET")
+	t.Setenv("TELEGRAM_SESSION_PATH", filepath.Join(t.TempDir(), "bot.session"))
 	if code := run(); code != 1 {
 		t.Fatalf("код завершения: %d; ожидался 1", code)
 	}

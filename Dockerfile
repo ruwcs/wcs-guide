@@ -24,10 +24,13 @@ LABEL org.opencontainers.image.source="https://github.com/ruwcs/wcs-guide"
 LABEL org.opencontainers.image.licenses="AGPL-3.0-only"
 COPY --from=builder /build/wcs-guide /wcs-guide
 COPY LICENSE /licenses/LICENSE
-# Внешний каталог SQLite и файлов журнала; права готовит оператор.
+# Постоянный каталог данных приложения.
 VOLUME ["/data"]
-# Стандартный путь БД внутри контейнера.
+# Путь к файлу базы данных.
 ENV DB_PATH=/data/wcs-guide.db
-# Фиксированный HTTP-порт приложения.
+# HTTP-порт приложения.
 EXPOSE 8080
 ENTRYPOINT ["/wcs-guide"]
+
+# Путь к файлу сессии Telegram.
+ENV TELEGRAM_SESSION_PATH=/data/telegram-bot.session
