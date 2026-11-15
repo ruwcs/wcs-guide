@@ -18,3 +18,6 @@ tmp
 *.session-*
 *.log
 .DS_Store
+
+# Локальные утилиты разработки
+/tools/
