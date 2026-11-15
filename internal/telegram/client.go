@@ -19,6 +19,7 @@ import (
 
 // Client — клиент получения публикаций Telegram.
 type Client struct {
+	pausedUntil time.Time     // Окончание обязательной паузы Telegram.
 	apiID       int           // Идентификатор приложения Telegram.
 	apiHash     string        // Секрет приложения Telegram.
 	token       string        // Секрет отдельного бота.
@@ -205,7 +206,7 @@ func (c *Client) withAPI(ctx context.Context, operation func(context.Context, *t
 	if managed {
 		return &Error{Code: "unavailable"}
 	}
-	client := td.NewClient(c.apiID, c.apiHash, td.Options{NoUpdates: true, SessionStorage: &session.FileStorage{Path: c.sessionPath}})
+	client := td.NewClient(c.apiID, c.apiHash, td.Options{NoUpdates: true, Middlewares: []td.Middleware{td.MiddlewareFunc(c.rateLimit)}, SessionStorage: &session.FileStorage{Path: c.sessionPath}})
 	var err error
 	err = client.Run(ctx, func(ctx context.Context) error {
 		if err := authorizeBot(ctx, client.Auth(), c.token); err != nil {
@@ -259,7 +260,7 @@ func (c *Client) Run(ctx context.Context, logger *slog.Logger) {
 	c.managed = true
 	c.mutex.Unlock()
 	for ctx.Err() == nil {
-		client := td.NewClient(c.apiID, c.apiHash, td.Options{NoUpdates: true, Logger: logslog.New(logger), SessionStorage: &session.FileStorage{Path: c.sessionPath}, OnAuthLost: func(ctx context.Context, err error) error { return err }})
+		client := td.NewClient(c.apiID, c.apiHash, td.Options{NoUpdates: true, Middlewares: []td.Middleware{td.MiddlewareFunc(c.rateLimit)}, Logger: logslog.New(logger), SessionStorage: &session.FileStorage{Path: c.sessionPath}, OnAuthLost: func(ctx context.Context, err error) error { return err }})
 		err := client.Run(ctx, func(ctx context.Context) error {
 			if err := authorizeBot(ctx, client.Auth(), c.token); err != nil {
 				return err
