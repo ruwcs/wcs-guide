@@ -109,3 +109,47 @@ CREATE TABLE blocks (
 
 -- Поиск страниц и блоков источника.
 CREATE INDEX blocks_source ON blocks(source_id);
+
+-- Пользователи редакторского интерфейса.
+CREATE TABLE users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    login TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL,
+    webauthn_id BLOB NOT NULL UNIQUE CHECK (length(webauthn_id) = 32),
+    role TEXT NOT NULL CHECK (role IN ('admin', 'editor')),
+    active INTEGER NOT NULL CHECK (active IN (0, 1)),
+    created_at TEXT NOT NULL
+) STRICT;
+
+-- Зарегистрированные ключи доступа пользователей.
+CREATE TABLE credentials (
+    id BLOB PRIMARY KEY NOT NULL,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    credential_json TEXT NOT NULL CHECK (
+        json_valid(credential_json) AND json_type(credential_json) = 'object'
+    ),
+    created_at TEXT NOT NULL
+) STRICT;
+
+-- Поиск ключей пользователя.
+CREATE INDEX credentials_user ON credentials(user_id);
+
+-- Серверные сессии браузеров.
+CREATE TABLE sessions (
+    token_hash BLOB PRIMARY KEY NOT NULL CHECK (length(token_hash) = 32),
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+) STRICT;
+
+-- Отзыв и очистка сессий.
+CREATE INDEX sessions_user ON sessions(user_id);
+CREATE INDEX sessions_expiry ON sessions(expires_at);
+
+-- Одноразовые разрешения регистрации ключа доступа.
+CREATE TABLE registration_grants (
+    token_hash BLOB PRIMARY KEY NOT NULL CHECK (length(token_hash) = 32),
+    user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+) STRICT;
