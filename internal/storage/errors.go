@@ -12,19 +12,19 @@ import (
 )
 
 var (
-	// ErrNotFound означает отсутствие сущности.
+	// ErrNotFound — отсутствие сущности.
 	ErrNotFound = errors.New("storage: сущность не найдена")
-	// ErrUnique означает конфликт уникальности.
+	// ErrUnique — конфликт уникальности.
 	ErrUnique = errors.New("storage: значение уже занято")
-	// ErrConflict означает изменение состояния или несогласованные ссылки.
+	// ErrConflict — изменение состояния или несогласованные ссылки.
 	ErrConflict = errors.New("storage: конфликт состояния")
-	// ErrSchemaIncompatible означает неподдерживаемую схему.
+	// ErrSchemaIncompatible — неподдерживаемую схему.
 	ErrSchemaIncompatible = errors.New("storage: несовместимая схема; данные оставлены без изменений")
-	// ErrSchemaTooNew означает версию выше поддерживаемой.
+	// ErrSchemaTooNew — версию выше поддерживаемой.
 	ErrSchemaTooNew = errors.New("storage: версия схемы новее поддерживаемой")
 )
 
-// internalError скрывает небезопасное сообщение драйвера, сохраняя причину.
+// internalError — внутренняя ошибка хранилища.
 type internalError struct {
 	cause error // Исходная ошибка для errors.Is и errors.As.
 }
@@ -36,7 +36,11 @@ func (err *internalError) Error() string {
 
 // Unwrap реализует интерфейс interface{ Unwrap() error } для internalError.
 func (err *internalError) Unwrap() error { return err.cause }
-func invalid(field string) error         { return fmt.Errorf("%w: storage.%s", domain.ErrInvalid, field) }
+
+// invalid возвращает ошибку проверки данных.
+func invalid(field string) error { return fmt.Errorf("%w: storage.%s", domain.ErrInvalid, field) }
+
+// protect классифицирует ошибку хранилища.
 func protect(err error) error {
 	if err == nil {
 		return nil

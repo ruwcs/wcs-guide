@@ -10,14 +10,21 @@ import (
 	"time"
 )
 
+// instant возвращает тестовую дату.
 func instant() time.Time { return time.Date(2026, 11, 14, 12, 0, 0, 0, time.FixedZone("test", 10800)) }
+
+// page создаёт тестовую страницу.
 func page() Page {
 	at := instant()
 	return Page{ID: 1, Path: "/календарь", Title: "Календарь", Language: "ru", CreatedAt: at, UpdatedAt: at, Blocks: []Block{{ID: 1, PageID: 1, Type: BlockText, Text: "текст"}}}
 }
+
+// imported создаёт тестовый импортируемый блок.
 func imported() Block {
 	return Block{ID: 2, PageID: 1, Type: BlockImported, Import: &ImportSettings{SourceID: 1}}
 }
+
+// requireInvalid проверяет ошибку валидации.
 func requireInvalid(t *testing.T, err error) {
 	t.Helper()
 	if !errors.Is(err, ErrInvalid) {
@@ -25,6 +32,7 @@ func requireInvalid(t *testing.T, err error) {
 	}
 }
 
+// TestSyncTransitions проверяет изменения состояния получения источника.
 func TestSyncTransitions(t *testing.T) {
 	var s SyncState
 	at := instant()
@@ -50,8 +58,10 @@ func TestSyncTransitions(t *testing.T) {
 	if !s.LastSuccessAt.Equal(success) {
 		t.Fatal("потерян последний успех")
 	}
+	if err := s.RecordFailure(at, "ошибка"); err != nil {
+		t.Fatal(err)
+	}
 	before := s
-	requireInvalid(t, s.RecordFailure(at, "ошибка"))
 	requireInvalid(t, s.RecordFailure(at.Add(3*time.Second), " "))
 	requireInvalid(t, s.RecordSuccess(time.Time{}))
 	if s != before {
@@ -68,6 +78,7 @@ func TestSyncTransitions(t *testing.T) {
 	}
 }
 
+// TestSourceValidation проверяет проверку свойств источника.
 func TestSourceValidation(t *testing.T) {
 	valid := Source{Name: "источник", Type: SourceTelegramPost, ExternalRef: "канал/1"}
 	if err := valid.Validate(); err != nil {
@@ -85,18 +96,7 @@ func TestSourceValidation(t *testing.T) {
 	}
 }
 
-func TestSnapshotValidation(t *testing.T) {
-	valid := Snapshot{SourceID: 1, RawContent: []byte("оригинал"), Format: "test", Checksum: "digest", FetchedAt: instant(), SourceModifiedAt: instant().Add(time.Hour)}
-	if err := valid.Validate(); err != nil {
-		t.Fatal(err)
-	}
-	for _, change := range []func(*Snapshot){func(s *Snapshot) { s.ID = -1 }, func(s *Snapshot) { s.SourceID = 0 }, func(s *Snapshot) { s.RawContent = nil }, func(s *Snapshot) { s.Format = "" }, func(s *Snapshot) { s.Checksum = "" }, func(s *Snapshot) { s.FetchedAt = time.Time{} }} {
-		s := valid
-		change(&s)
-		requireInvalid(t, s.Validate())
-	}
-}
-
+// TestPageLifecycle проверяет публикацию и снятие страницы.
 func TestPageLifecycle(t *testing.T) {
 	p := page()
 	at := instant().Add(time.Second)
@@ -139,8 +139,9 @@ func TestPageLifecycle(t *testing.T) {
 	}
 }
 
+// TestPageValidation проверяет проверку страницы и её блоков.
 func TestPageValidation(t *testing.T) {
-	for _, change := range []func(*Page){func(p *Page) { p.ID = -1 }, func(p *Page) { p.Status = 99 }, func(p *Page) { p.Path = "https://example.org" }, func(p *Page) { p.Path = "//example.org" }, func(p *Page) { p.Path = "/a?b" }, func(p *Page) { p.Path = "/a#b" }, func(p *Page) { p.UpdatedAt = p.CreatedAt.Add(-time.Second) }, func(p *Page) { p.Blocks[0].PageID = 2 }, func(p *Page) { p.Blocks = append(p.Blocks, p.Blocks[0]) }} {
+	for _, change := range []func(*Page){func(p *Page) { p.ID = -1 }, func(p *Page) { p.Status = 99 }, func(p *Page) { p.Path = "https://example.org" }, func(p *Page) { p.Path = "//example.org" }, func(p *Page) { p.Path = "/a?b" }, func(p *Page) { p.Path = "/a#b" }, func(p *Page) { p.Blocks[0].PageID = 2 }, func(p *Page) { p.Blocks = append(p.Blocks, p.Blocks[0]) }} {
 		p := page()
 		change(&p)
 		requireInvalid(t, p.Validate())
@@ -164,6 +165,7 @@ func TestPageValidation(t *testing.T) {
 	}
 }
 
+// TestExtractionRulesValidation проверяет проверку текстовых якорей.
 func TestExtractionRulesValidation(t *testing.T) {
 	for _, r := range []ExtractionRules{{}, {Start: TextAnchor{Text: "📅 Заголовок"}}, {End: TextAnchor{Text: "См также:", Include: true}}, {Start: TextAnchor{Include: true}, End: TextAnchor{Include: true}}} {
 		if err := r.Validate(); err != nil {
@@ -176,36 +178,7 @@ func TestExtractionRulesValidation(t *testing.T) {
 	}
 }
 
-func TestBlockResults(t *testing.T) {
-	b := imported()
-	if err := b.Validate(); err != nil {
-		t.Fatal(err)
-	}
-	r := PreparedContent{SourceID: 1, SnapshotID: 1, PreparedAt: instant(), Rules: ExtractionRules{Start: TextAnchor{Text: "старый якорь"}}}
-	b.Import.Rules = r.Rules
-	if err := b.ApplyPrepared(r); err != nil {
-		t.Fatal(err)
-	}
-	r.Content = "изменение копии"
-	if b.Prepared.Content != "" {
-		t.Fatal("результат не скопирован")
-	}
-	b.Import.Rules.Start.Text = "новый якорь"
-	if err := b.Validate(); err != nil {
-		t.Fatal("старый результат должен сохраняться", err)
-	}
-	old := b.Prepared
-	requireInvalid(t, b.ApplyPrepared(PreparedContent{}))
-	if b.Prepared != old {
-		t.Fatal("ошибка заменила результат")
-	}
-	for _, bad := range []Block{{Type: BlockText, Import: &ImportSettings{}}, {Type: BlockText, Prepared: &r}, {Type: BlockImported}, {Type: "unknown"}, {Type: BlockText, ID: -1}, {Type: BlockImported, Import: &ImportSettings{SourceID: 1}, Text: "не допускается"}} {
-		requireInvalid(t, bad.Validate())
-	}
-	r.PublishedAt = r.PreparedAt.Add(-time.Second)
-	requireInvalid(t, r.Validate())
-}
-
+// TestSafeLogging проверяет отсутствие содержимого в техническом журнале.
 func TestSafeLogging(t *testing.T) {
 	// secret обнаруживает случайный вывод содержимого сущностей в журнал.
 	const secret = "CONFIDENTIAL_MARKER"
@@ -222,7 +195,6 @@ func TestSafeLogging(t *testing.T) {
 		keys []string // Ожидаемые атрибуты журнала.
 	}{
 		{Source{ID: 1, Name: secret, ExternalRef: secret, FetchParams: map[string]string{"token": secret}, Sync: SyncState{LastError: secret}}, []string{"id", "type", "auto_refresh", "publication_blocked", "sync_status"}},
-		{Snapshot{ID: 1, RawContent: []byte(secret), Checksum: secret, Metadata: map[string]string{"secret": secret}}, []string{"id", "source_id", "raw_size"}},
 		{p, []string{"id", "status", "block_count"}},
 		{b, []string{"id", "page_id", "type", "has_prepared", "source_id"}},
 	}
@@ -242,6 +214,7 @@ func TestSafeLogging(t *testing.T) {
 	}
 }
 
+// TestPageMachineContext проверяет необязательный машинный контекст страницы.
 func TestPageMachineContext(t *testing.T) {
 	for _, text := range []string{"", "WCS — West Coast Swing.\n한국 <контекст> & \"пример\""} {
 		p := page()

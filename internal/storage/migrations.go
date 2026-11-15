@@ -10,14 +10,15 @@ import (
 	"strings"
 )
 
-// migrations содержит встроенные SQL-файлы последовательных версий схемы.
+// migrations — миграции схемы БД.
 //
 //go:embed migrations/*.sql
 var migrations embed.FS
 
+// initialize подготавливает схему хранилища.
 func (s *Storage) initialize(ctx context.Context) error { return s.migrate(ctx, migrations) }
 
-// migrate проверяет каталог и применяет каждую версию отдельной транзакцией.
+// migrate обновляет схему БД.
 func (s *Storage) migrate(ctx context.Context, files fs.FS) error {
 	names, err := fs.Glob(files, "migrations/*.sql")
 	if err != nil {

@@ -6,44 +6,39 @@ import (
 	"unicode/utf8"
 )
 
-// BlockType обозначает вид содержимого блока.
+// BlockType — вид содержимого блока.
 type BlockType string
 
 const (
-	// BlockText обозначает ручной Markdown-текст.
+	// BlockText — ручной Markdown-блок.
 	BlockText BlockType = "text"
-	// BlockImported обозначает импортируемое содержимое.
+	// BlockImported — импортируемый блок.
 	BlockImported BlockType = "imported"
 )
 
-// Block принадлежит странице; порядок определяется положением в Page.Blocks.
+// Block — блок содержимого страницы.
 type Block struct {
-	ID       int64            // Идентификатор блока для ссылок и изменений.
-	PageID   int64            // Страница, которой принадлежит блок.
+	ID       int64            // Идентификатор блока.
+	PageID   int64            // Идентификатор страницы блока.
 	Type     BlockType        // Вид содержимого блока.
 	Text     string           // Markdown ручного блока.
 	Import   *ImportSettings  // Источник и правила импорта; nil для ручного блока.
 	Prepared *PreparedContent // Последний успешный результат; nil до первой подготовки.
 }
 
-// ImportSettings содержит источник и действующие правила блока.
+// ImportSettings — настройки импорта блока.
 type ImportSettings struct {
-	SourceID int64           // Источник импортируемого содержимого.
+	SourceID int64           // Идентификатор источника импортируемого содержимого.
 	Rules    ExtractionRules // Действующие правила извлечения блока.
 }
 
-// PreparedContent сохраняет Markdown-результат и фактически применённые правила.
-// Нулевое PublishedAt означает, что результат ещё не публиковался.
+// PreparedContent — последнее успешно импортированное содержимое блока.
 type PreparedContent struct {
-	Content     string          // Подготовленный Markdown для отображения.
-	SourceID    int64           // Источник, из которого получен результат.
-	SnapshotID  int64           // Снимок, из которого получен результат.
-	Rules       ExtractionRules // Копия фактически применённых правил.
-	PreparedAt  time.Time       // Время успешной подготовки результата.
-	PublishedAt time.Time       // Время публикации результата; ноль — не публиковался.
+	Content    string    // Содержимое блока в Markdown.
+	PreparedAt time.Time // Время успешного импорта.
 }
 
-// Validate проверяет настройки без обращения к источнику.
+// Validate проверяет настройки импорта.
 func (s ImportSettings) Validate() error {
 	if s.SourceID <= 0 {
 		return invalid("ImportSettings.source_id")
@@ -53,10 +48,10 @@ func (s ImportSettings) Validate() error {
 
 // Validate проверяет результат; пустое содержимое допустимо.
 func (p PreparedContent) Validate() error {
-	if p.SourceID <= 0 || p.SnapshotID <= 0 || p.PreparedAt.IsZero() || !utf8.ValidString(p.Content) || (!p.PublishedAt.IsZero() && p.PublishedAt.Before(p.PreparedAt)) {
+	if p.PreparedAt.IsZero() || !utf8.ValidString(p.Content) {
 		return invalid("PreparedContent")
 	}
-	return p.Rules.Validate()
+	return nil
 }
 
 // Validate проверяет совместимость полей с типом блока.
@@ -77,54 +72,11 @@ func (b Block) Validate() error {
 			return err
 		}
 		if b.Prepared != nil {
-			if b.Prepared.SourceID != b.Import.SourceID {
-				return invalid("Block.prepared_source")
-			}
 			return b.Prepared.Validate()
 		}
 	default:
 		return invalid("Block.type")
 	}
-	return nil
-}
-
-// ApplyPrepared заменяет результат только после успешной проверки.
-// Источник и правила должны совпадать с действующими настройками.
-// Актуальность снимка проверяет вызывающий код при транзакционной записи.
-// Метод не публикует страницу и не назначает время публикации.
-func (b *Block) ApplyPrepared(result PreparedContent) error {
-	if err := b.Validate(); err != nil {
-		return err
-	}
-	if b.Type != BlockImported {
-		return invalid("Block.type")
-	}
-	if err := result.Validate(); err != nil {
-		return err
-	}
-	if result.SourceID != b.Import.SourceID || result.Rules != b.Import.Rules {
-		return invalid("Block.prepared_settings")
-	}
-	b.Prepared = &result
-	return nil
-}
-
-// ReplaceImport согласованно заменяет настройки и проверенный результат.
-// Метод не подтверждает предпросмотр и не заменяет транзакцию хранилища.
-func (b *Block) ReplaceImport(settings ImportSettings, result PreparedContent) error {
-	if err := b.Validate(); err != nil {
-		return err
-	}
-	if b.Type != BlockImported {
-		return invalid("Block.type")
-	}
-	next := *b
-	next.Import = &settings
-	next.Prepared = nil
-	if err := next.ApplyPrepared(result); err != nil {
-		return err
-	}
-	*b = next
 	return nil
 }
 
@@ -137,5 +89,5 @@ func (b Block) LogValue() slog.Value {
 	return slog.GroupValue(attrs...)
 }
 
-// Проверка контракта безопасного логирования сущности при компиляции.
+// Соответствие интерфейсу slog.LogValuer.
 var _ slog.LogValuer = Block{}

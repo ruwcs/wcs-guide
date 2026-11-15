@@ -5,39 +5,39 @@ import (
 	"time"
 )
 
-// SourceType обозначает способ получения содержимого.
+// SourceType — тип источника содержимого.
 type SourceType string
 
-// SourceTelegramPost обозначает конкретную публикацию Telegram.
+// SourceTelegramPost — публикация Telegram.
 const SourceTelegramPost SourceType = "telegram_post"
 
-// SyncStatus описывает последнюю завершённую попытку.
+// SyncStatus — результат последней попытки получения содержимого.
 type SyncStatus string
 
 const (
-	// SyncNever означает отсутствие завершённых попыток.
+	// SyncNever — содержимое ещё не получалось.
 	SyncNever SyncStatus = "never"
-	// SyncSucceeded означает успешное получение.
+	// SyncSucceeded — успешное получение содержимого.
 	SyncSucceeded SyncStatus = "succeeded"
-	// SyncFailed означает ошибку получения.
+	// SyncFailed — ошибка получения содержимого.
 	SyncFailed SyncStatus = "failed"
 )
 
-// Source описывает происхождение контента независимо от fetcher и хранения.
+// Source — внешний источник содержимого.
 // Замена внешней публикации требует нового Source, что контролирует приложение.
 type Source struct {
-	ID                 int64             // Идентификатор для ссылок на источник.
+	ID                 int64             // Идентификатор источника.
 	Name               string            // Название источника для редактора.
 	Type               SourceType        // Способ получения содержимого.
 	ExternalRef        string            // URL или внешний идентификатор публикации.
-	FetchParams        map[string]string // Параметры получения для fetcher.
+	FetchParams        map[string]string // Параметры получения содержимого.
 	UpdateInterval     time.Duration     // Интервал автоматического обновления.
 	AutoRefresh        bool              // Разрешение автоматического обновления.
 	PublicationBlocked bool              // Запрет публичного отображения содержимого источника.
 	Sync               SyncState         // Состояние последней завершённой попытки.
 }
 
-// SyncState хранит времена завершения попыток и безопасное описание ошибки.
+// SyncState — состояние получения содержимого источника.
 // Очистку ошибки от чувствительных данных обеспечивает вызывающий код.
 type SyncState struct {
 	LastAttemptAt time.Time // Время завершения последней попытки получения.
@@ -45,7 +45,7 @@ type SyncState struct {
 	LastError     string    // Безопасное описание последней ошибки; пусто при успехе.
 }
 
-// Status выводит статус без дублирующего изменяемого поля.
+// Status возвращает результат последней попытки получения содержимого.
 func (s SyncState) Status() SyncStatus {
 	if s.LastAttemptAt.IsZero() {
 		return SyncNever
@@ -64,9 +64,6 @@ func (s SyncState) Validate() error {
 		}
 		return nil
 	}
-	if s.LastSuccessAt.After(s.LastAttemptAt) {
-		return invalid("SyncState.success")
-	}
 	if s.LastError == "" {
 		if s.LastSuccessAt.IsZero() || !s.LastSuccessAt.Equal(s.LastAttemptAt) {
 			return invalid("SyncState.success")
@@ -82,7 +79,7 @@ func (s *SyncState) RecordSuccess(at time.Time) error {
 	if err := s.Validate(); err != nil {
 		return err
 	}
-	if at.IsZero() || at.Before(s.LastAttemptAt) {
+	if at.IsZero() {
 		return invalid("SyncState.at")
 	}
 	*s = SyncState{LastAttemptAt: at.UTC(), LastSuccessAt: at.UTC()}
@@ -94,14 +91,14 @@ func (s *SyncState) RecordFailure(at time.Time, message string) error {
 	if err := s.Validate(); err != nil {
 		return err
 	}
-	if at.IsZero() || at.Before(s.LastAttemptAt) || blank(message) {
+	if at.IsZero() || blank(message) {
 		return invalid("SyncState.failure")
 	}
 	s.LastAttemptAt, s.LastError = at.UTC(), message
 	return nil
 }
 
-// Validate проверяет локальные свойства, не существование внешнего источника.
+// Validate проверяет источник.
 func (s Source) Validate() error {
 	if s.ID < 0 || blank(s.Name) || s.Type != SourceTelegramPost || blank(s.ExternalRef) {
 		return invalid("Source.identity")
@@ -117,5 +114,5 @@ func (s Source) LogValue() slog.Value {
 	return slog.GroupValue(slog.Int64("id", s.ID), slog.String("type", string(s.Type)), slog.Bool("auto_refresh", s.AutoRefresh), slog.Bool("publication_blocked", s.PublicationBlocked), slog.String("sync_status", string(s.Sync.Status())))
 }
 
-// Проверка контракта безопасного логирования сущности при компиляции.
+// Соответствие интерфейсу slog.LogValuer.
 var _ slog.LogValuer = Source{}

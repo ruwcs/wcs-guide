@@ -9,13 +9,13 @@ import (
 	"unicode/utf8"
 )
 
-// PageStatus обозначает публичность страницы.
+// PageStatus — состояние публикации страницы.
 type PageStatus uint8
 
 const (
-	// PageDraft — состояние новой или снятой страницы.
+	// PageDraft — черновик страницы.
 	PageDraft PageStatus = iota
-	// PagePublished — явно опубликованная страница.
+	// PagePublished — опубликованная страница.
 	PagePublished
 )
 
@@ -31,9 +31,9 @@ func (s PageStatus) String() string {
 	}
 }
 
-// Page содержит упорядоченные блоки независимо от URL-иерархии.
+// Page — страница сайта.
 type Page struct {
-	ID             int64      // Идентификатор страницы для связи с блоками.
+	ID             int64      // Идентификатор страницы.
 	Path           string     // Канонический незакодированный локальный адрес страницы.
 	Title          string     // Единый заголовок страницы и её представлений.
 	Description    string     // Краткое текстовое описание для метаданных и каталогов.
@@ -46,7 +46,7 @@ type Page struct {
 	Blocks         []Block    // Блоки в порядке отображения на странице.
 }
 
-// Validate проверяет страницу и её блоки без проверки уникальности адреса на сайте.
+// Validate проверяет страницу и её блоки.
 func (p Page) Validate() error {
 	if p.ID < 0 || (p.Status != PageDraft && p.Status != PagePublished) {
 		return invalid("Page.identity")
@@ -56,12 +56,11 @@ func (p Page) Validate() error {
 			return invalid("Page.text")
 		}
 	}
-	if p.Path != "" {
-		if !strings.HasPrefix(p.Path, "/") || path.Clean(p.Path) != p.Path || strings.ContainsAny(p.Path, "%?#\\") || strings.ContainsFunc(p.Path, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) {
-			return invalid("Page.path")
-		}
+	if err := ValidatePagePath(p.Path); err != nil {
+		return err
 	}
-	if p.CreatedAt.IsZero() || p.UpdatedAt.Before(p.CreatedAt) || (!p.PublishedAt.IsZero() && (p.PublishedAt.Before(p.CreatedAt) || p.PublishedAt.After(p.UpdatedAt))) {
+
+	if p.CreatedAt.IsZero() || p.UpdatedAt.IsZero() {
 		return invalid("Page.time")
 	}
 	if p.Status == PagePublished && (blank(p.Title) || p.Path == "" || blank(p.Language) || p.PublishedAt.IsZero()) {
@@ -82,12 +81,12 @@ func (p Page) Validate() error {
 	return nil
 }
 
-// Publish явно публикует страницу; повторный вызов сохраняет дату.
+// Publish публикует страницу.
 func (p *Page) Publish(at time.Time) error {
 	if err := p.Validate(); err != nil {
 		return err
 	}
-	if at.IsZero() || at.Before(p.UpdatedAt) {
+	if at.IsZero() {
 		return invalid("Page.at")
 	}
 	if p.Status == PagePublished {
@@ -100,12 +99,12 @@ func (p *Page) Publish(at time.Time) error {
 	return nil
 }
 
-// Unpublish снимает страницу, сохраняя содержимое и прежнюю дату публикации.
+// Unpublish снимает страницу с публикации.
 func (p *Page) Unpublish(at time.Time) error {
 	if err := p.Validate(); err != nil {
 		return err
 	}
-	if at.IsZero() || at.Before(p.UpdatedAt) {
+	if at.IsZero() {
 		return invalid("Page.at")
 	}
 	if p.Status == PageDraft {
@@ -120,5 +119,20 @@ func (p Page) LogValue() slog.Value {
 	return slog.GroupValue(slog.Int64("id", p.ID), slog.String("status", p.Status.String()), slog.Int("block_count", len(p.Blocks)))
 }
 
-// Проверка контракта безопасного логирования сущности при компиляции.
+// Соответствие интерфейсу slog.LogValuer.
 var _ slog.LogValuer = Page{}
+
+// ValidatePagePath проверяет канонический адрес и отсутствие конфликтов с HTTP-маршрутами.
+// Пустой адрес допустим для незавершённого черновика.
+func ValidatePagePath(value string) error {
+	if value == "" {
+		return nil
+	}
+	if !utf8.ValidString(value) || !strings.HasPrefix(value, "/") || path.Clean(value) != value || strings.ContainsAny(value, "%?#\\") || strings.ContainsFunc(value, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) {
+		return invalid("Page.path")
+	}
+	if value == "/healthz" || value == "/robots.txt" || value == "/sitemap.xml" || value == "/static" || strings.HasPrefix(value, "/static/") || strings.HasSuffix(value, ".md") {
+		return invalid("Page.reserved_path")
+	}
+	return nil
+}

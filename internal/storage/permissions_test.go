@@ -6,8 +6,11 @@ import (
 	"reflect"
 	"runtime"
 	"testing"
+
+	"github.com/ruwcs/wcs-guide/internal/domain"
 )
 
+// TestOpenPermissions проверяет права доступа к БД и её каталогу.
 func TestOpenPermissions(t *testing.T) {
 	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
 		t.Skip("проверка POSIX-прав требует непривилегированного пользователя")
@@ -26,7 +29,7 @@ func TestOpenPermissions(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			directory := t.TempDir()
 			path := filepath.Join(directory, "test.db")
-			var original SourceRecord
+			var original domain.Source
 			if test.existing {
 				store, err := Open(ctx, path)
 				must(t, err)
@@ -56,7 +59,7 @@ func TestOpenPermissions(t *testing.T) {
 			store, err = Open(ctx, path)
 			must(t, err)
 			defer store.Close()
-			got, err := store.GetSource(ctx, original.Source.ID)
+			got, err := store.GetSource(ctx, original.ID)
 			must(t, err)
 			if !reflect.DeepEqual(got, original) {
 				t.Fatal("проверка открытия изменила данные")

@@ -1,4 +1,4 @@
-// Package storage хранит сущности CMS в SQLite. Сеть, обработка контента и рендеринг находятся вне пакета.
+// Package storage предоставляет постоянное хранилище данных WCS Guide.
 package storage
 
 import (
@@ -11,12 +11,12 @@ import (
 	"strings"
 )
 
-// Storage владеет единственным пулом соединений SQLite.
+// Storage — хранилище данных WCS Guide.
 type Storage struct {
-	db *sql.DB // Закрытый пул с одним соединением.
+	db *sql.DB // Подключение к SQLite.
 }
 
-// Open открывает файловую БД, проверяет совместимость схемы и возможность записи.
+// Open открывает хранилище.
 func Open(ctx context.Context, filename string) (*Storage, error) {
 	if filename == "" || filename == ":memory:" || strings.HasPrefix(filename, "file:") {
 		return nil, invalid("database path")
@@ -69,10 +69,10 @@ func Open(ctx context.Context, filename string) (*Storage, error) {
 	return s, nil
 }
 
-// Close закрывает соединения по контракту database/sql.
+// Close закрывает хранилище.
 func (s *Storage) Close() error { return protect(s.db.Close()) }
 
-// checkWritable проверяет запись и создание журнала реальной транзакцией SQLite.
+// checkWritable проверяет доступность БД для записи.
 // Повторная запись текущей версии не меняет схему и пользовательские данные.
 func (s *Storage) checkWritable(ctx context.Context) error {
 	return s.withTx(ctx, func(tx *sql.Tx) error {
@@ -85,6 +85,7 @@ func (s *Storage) checkWritable(ctx context.Context) error {
 	})
 }
 
+// checkPragmas проверяет настройки SQLite.
 func (s *Storage) checkPragmas(ctx context.Context) error {
 	for name, want := range map[string]string{"foreign_keys": "1", "journal_mode": "delete", "synchronous": "3", "busy_timeout": "5000"} {
 		var got string
@@ -98,7 +99,7 @@ func (s *Storage) checkPragmas(ctx context.Context) error {
 	return nil
 }
 
-// withTx выполняет короткую транзакцию без сетевой работы.
+// withTx выполняет операцию в транзакции.
 // BEGIN IMMEDIATE применяется также при чтении: один экземпляр и одно соединение
 // сериализуют операции; внешний писатель может вызвать ожидание busy_timeout.
 func (s *Storage) withTx(ctx context.Context, fn func(*sql.Tx) error) error {

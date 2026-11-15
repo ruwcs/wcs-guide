@@ -4,18 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"math"
+	"reflect"
 	"time"
 
 	"github.com/ruwcs/wcs-guide/internal/domain"
 )
 
-// PageRecord содержит страницу и условия редакторского сохранения.
-type PageRecord struct {
-	Page           domain.Page     // Страница с упорядоченными блоками.
-	EditRevision   int64           // Редакция редакторских изменений.
-	BlockRevisions map[int64]int64 // Редакции настроек и результатов блоков.
-}
-
+// pageIDs возвращает идентификаторы страниц.
 func pageIDs(ctx context.Context, tx *sql.Tx, published bool) (ids []int64, err error) {
 	q := "SELECT id FROM pages"
 	if published {
@@ -36,25 +31,27 @@ func pageIDs(ctx context.Context, tx *sql.Tx, published bool) (ids []int64, err 
 	}
 	return ids, rows.Err()
 }
-func getPage(ctx context.Context, tx *sql.Tx, id int64) (record PageRecord, err error) {
+
+// getPage читает страницу и её блоки.
+func getPage(ctx context.Context, tx *sql.Tx, id int64) (record domain.Page, err error) {
 	var path, createdAt, updatedAt, publishedAt sql.NullString
 	err = tx.QueryRowContext(ctx, `SELECT id, path, title, description, machine_context, language,
-        status, created_at, updated_at, published_at, edit_revision
+        status, created_at, updated_at, published_at
         FROM pages
-        WHERE id = ?`, id).Scan(&record.Page.ID, &path, &record.Page.Title, &record.Page.Description, &record.Page.MachineContext, &record.Page.Language, &record.Page.Status, &createdAt, &updatedAt, &publishedAt, &record.EditRevision)
+        WHERE id = ?`, id).Scan(&record.ID, &path, &record.Title, &record.Description, &record.MachineContext, &record.Language, &record.Status, &createdAt, &updatedAt, &publishedAt)
 	if err != nil {
 		return
 	}
-	record.Page.Path = path.String
-	record.Page.CreatedAt, err = parsed(createdAt)
+	record.Path = path.String
+	record.CreatedAt, err = parsed(createdAt)
 	if err != nil {
 		return
 	}
-	record.Page.UpdatedAt, err = parsed(updatedAt)
+	record.UpdatedAt, err = parsed(updatedAt)
 	if err != nil {
 		return
 	}
-	record.Page.PublishedAt, err = parsed(publishedAt)
+	record.PublishedAt, err = parsed(publishedAt)
 	if err != nil {
 		return
 	}
@@ -76,26 +73,24 @@ func getPage(ctx context.Context, tx *sql.Tx, id int64) (record PageRecord, err 
 	if err != nil {
 		return record, err
 	}
-	record.BlockRevisions = make(map[int64]int64)
 	for _, blockID := range ids {
-		block, revision, err := getBlock(ctx, tx, blockID)
+		block, err := getBlock(ctx, tx, blockID)
 		if err != nil {
 			return record, err
 		}
-		record.Page.Blocks = append(record.Page.Blocks, block)
-		record.BlockRevisions[blockID] = revision
+		record.Blocks = append(record.Blocks, block)
 	}
-	return record, record.Page.Validate()
+	return record, record.Validate()
 }
 
-// GetPage возвращает страницу и редакции одним согласованным чтением.
-func (s *Storage) GetPage(ctx context.Context, id int64) (r PageRecord, err error) {
+// GetPage возвращает страницу.
+func (s *Storage) GetPage(ctx context.Context, id int64) (r domain.Page, err error) {
 	err = s.withTx(ctx, func(tx *sql.Tx) error { var err error; r, err = getPage(ctx, tx, id); return err })
 	return
 }
 
-// GetPageByPath ищет редакторскую страницу по точному каноническому адресу.
-func (s *Storage) GetPageByPath(ctx context.Context, path string) (r PageRecord, err error) {
+// GetPageByPath возвращает страницу по адресу.
+func (s *Storage) GetPageByPath(ctx context.Context, path string) (r domain.Page, err error) {
 	err = s.withTx(ctx, func(tx *sql.Tx) error {
 		var id int64
 		err := tx.QueryRowContext(ctx, "SELECT id FROM pages WHERE path=?", path).Scan(&id)
@@ -107,6 +102,8 @@ func (s *Storage) GetPageByPath(ctx context.Context, path string) (r PageRecord,
 	})
 	return
 }
+
+// listPages возвращает страницы из хранилища.
 func (s *Storage) listPages(ctx context.Context, published bool) (out []domain.Page, err error) {
 	err = s.withTx(ctx, func(tx *sql.Tx) error {
 		ids, err := pageIDs(ctx, tx, published)
@@ -118,7 +115,7 @@ func (s *Storage) listPages(ctx context.Context, published bool) (out []domain.P
 			if err != nil {
 				return err
 			}
-			out = append(out, r.Page)
+			out = append(out, r)
 		}
 		return nil
 	})
@@ -130,8 +127,8 @@ func (s *Storage) ListPages(ctx context.Context) ([]domain.Page, error) {
 	return s.listPages(ctx, false)
 }
 
-// CreatePage создаёт черновик и назначает ID странице и новым блокам.
-func (s *Storage) CreatePage(ctx context.Context, p domain.Page) (r PageRecord, err error) {
+// CreatePage создаёт черновик страницы.
+func (s *Storage) CreatePage(ctx context.Context, p domain.Page) (r domain.Page, err error) {
 	if p.ID != 0 || p.Status != domain.PageDraft || !p.PublishedAt.IsZero() {
 		return r, invalid("page.identity")
 	}
@@ -167,13 +164,13 @@ func (s *Storage) CreatePage(ctx context.Context, p domain.Page) (r PageRecord, 
 		return err
 	})
 	if err != nil {
-		r = PageRecord{}
+		r = domain.Page{}
 	}
 	return
 }
 
-// SavePage сохраняет композицию, не перезаписывая результаты фоновой обработки.
-func (s *Storage) SavePage(ctx context.Context, page domain.Page, revision int64, at time.Time) (record PageRecord, err error) {
+// SavePage сохраняет редакторские изменения страницы.
+func (s *Storage) SavePage(ctx context.Context, page domain.Page, at time.Time) (record domain.Page, err error) {
 	if err = page.Validate(); err != nil {
 		return
 	}
@@ -185,10 +182,7 @@ func (s *Storage) SavePage(ctx context.Context, page domain.Page, revision int64
 		if err != nil {
 			return err
 		}
-		if old.EditRevision != revision || page.Status != old.Page.Status || !page.CreatedAt.Equal(old.Page.CreatedAt) || !page.PublishedAt.Equal(old.Page.PublishedAt) {
-			return ErrConflict
-		}
-		if at.IsZero() || at.Before(old.Page.UpdatedAt) {
+		if at.IsZero() {
 			return invalid("page.at")
 		}
 		ids := []int64{page.ID}
@@ -197,7 +191,7 @@ func (s *Storage) SavePage(ctx context.Context, page domain.Page, revision int64
 			return err
 		}
 		existing := make(map[int64]domain.Block)
-		for _, block := range old.Page.Blocks {
+		for _, block := range old.Blocks {
 			existing[block.ID] = block
 		}
 		var maxPosition sql.NullInt64
@@ -225,8 +219,18 @@ func (s *Storage) SavePage(ctx context.Context, page domain.Page, revision int64
 			if !ok || prev.Type != block.Type {
 				return ErrConflict
 			}
-			if block.Type == domain.BlockImported && *prev.Import != *block.Import {
-				return ErrConflict
+			if block.Type == domain.BlockImported {
+				if prev.Import.SourceID != block.Import.SourceID {
+					if _, err = tx.ExecContext(ctx, "UPDATE blocks SET imported_content=NULL,imported_at=NULL WHERE id=?", block.ID); err != nil {
+						return err
+					}
+				}
+				if _, err = tx.ExecContext(ctx, `UPDATE blocks
+        SET source_id=?, start_anchor=?, include_start=?,
+        end_anchor=?, include_end=?
+        WHERE id=?`, block.Import.SourceID, block.Import.Rules.Start.Text, block.Import.Rules.Start.Include, block.Import.Rules.End.Text, block.Import.Rules.End.Include, block.ID); err != nil {
+					return err
+				}
 			}
 			if _, err = tx.ExecContext(ctx, "UPDATE blocks SET position=?,text=? WHERE id=?", i, block.Text, block.ID); err != nil {
 				return err
@@ -238,58 +242,53 @@ func (s *Storage) SavePage(ctx context.Context, page domain.Page, revision int64
 				return err
 			}
 		}
-		// Изменение только настроек обрабатывается отдельными методами.
-		changed := page.Title != old.Page.Title || page.Description != old.Page.Description || page.MachineContext != old.Page.MachineContext || page.Language != old.Page.Language || page.Path != old.Page.Path || len(page.Blocks) != len(old.Page.Blocks)
+		changed := page.Title != old.Title || page.Description != old.Description || page.MachineContext != old.MachineContext || page.Language != old.Language || page.Path != old.Path || len(page.Blocks) != len(old.Blocks)
 		if !changed {
 			for i, block := range page.Blocks {
-				if block.ID != old.Page.Blocks[i].ID || block.Text != old.Page.Blocks[i].Text {
+				if block.ID != old.Blocks[i].ID || block.Text != old.Blocks[i].Text || !reflect.DeepEqual(block.Import, old.Blocks[i].Import) {
 					changed = true
 					break
 				}
 			}
 		}
-		updated := old.Page.UpdatedAt
+		updated := old.UpdatedAt
 		if changed {
 			updated = at
 		}
 		if _, err = tx.ExecContext(ctx, `UPDATE pages
         SET path = ?, title = ?, description = ?, machine_context = ?,
-        language = ?, updated_at = ?, edit_revision = edit_revision + 1
+        language = ?, updated_at = ?
         WHERE id = ?`, nullable(page.Path), page.Title, page.Description, page.MachineContext, page.Language, stamp(updated), page.ID); err != nil {
 			return err
 		}
-		if err = refreshPublic(ctx, tx, ids, before, at, false); err != nil {
+		if err = refreshPublic(ctx, tx, ids, before, at); err != nil {
 			return err
 		}
 		record, err = getPage(ctx, tx, page.ID)
 		return err
 	})
 	if err != nil {
-		record = PageRecord{}
+		record = domain.Page{}
 	}
 	return
 }
-func (s *Storage) setPublished(ctx context.Context, id, revision int64, at time.Time, publish bool) error {
+
+// setPublished изменяет состояние публикации страницы.
+func (s *Storage) setPublished(ctx context.Context, id int64, at time.Time, publish bool) error {
 	return s.withTx(ctx, func(tx *sql.Tx) error {
 		record, err := getPage(ctx, tx, id)
 		if err != nil {
 			return err
 		}
-		if record.EditRevision != revision {
-			return ErrConflict
-		}
 		if err = validTime(at); err != nil {
 			return err
 		}
 		if !publish {
-			if at.Before(record.Page.UpdatedAt) && !at.IsZero() {
-				at = record.Page.UpdatedAt
-			}
-			if err = record.Page.Unpublish(at); err != nil {
+			if err = record.Unpublish(at); err != nil {
 				return err
 			}
-			if record.Page.Status == domain.PageDraft {
-				_, err = tx.ExecContext(ctx, "UPDATE pages SET status=0,updated_at=?,edit_revision=edit_revision+1 WHERE id=? AND status=1", stamp(record.Page.UpdatedAt), id)
+			if record.Status == domain.PageDraft {
+				_, err = tx.ExecContext(ctx, "UPDATE pages SET status=0,updated_at=? WHERE id=? AND status=1", stamp(record.UpdatedAt), id)
 				return err
 			}
 		}
@@ -298,32 +297,28 @@ func (s *Storage) setPublished(ctx context.Context, id, revision int64, at time.
 		if err != nil {
 			return err
 		}
-		old := record.Page.Status
-		err = record.Page.Publish(at)
+		old := record.Status
+		err = record.Publish(at)
 		if err != nil {
 			return err
 		}
-		if old == record.Page.Status {
+		if old == record.Status {
 			return nil
 		}
-		if _, err = tx.ExecContext(ctx, "UPDATE pages SET status=?,updated_at=?,published_at=?,edit_revision=edit_revision+1 WHERE id=?", record.Page.Status, stamp(record.Page.UpdatedAt), stamp(record.Page.PublishedAt), id); err != nil {
+		if _, err = tx.ExecContext(ctx, "UPDATE pages SET status=?,updated_at=?,published_at=? WHERE id=?", record.Status, stamp(record.UpdatedAt), stamp(record.PublishedAt), id); err != nil {
 			return err
 		}
-		if publish {
-			if err = publishReadyForPage(ctx, tx, id, at); err != nil {
-				return err
-			}
-		}
-		return refreshPublic(ctx, tx, ids, before, at, false)
+
+		return refreshPublic(ctx, tx, ids, before, at)
 	})
 }
 
-// PublishPage явно публикует текущую страницу.
-func (s *Storage) PublishPage(ctx context.Context, id, revision int64, at time.Time) error {
-	return s.setPublished(ctx, id, revision, at, true)
+// PublishPage публикует страницу.
+func (s *Storage) PublishPage(ctx context.Context, id int64, at time.Time) error {
+	return s.setPublished(ctx, id, at, true)
 }
 
-// UnpublishPage снимает страницу, не удаляя её данные.
-func (s *Storage) UnpublishPage(ctx context.Context, id, revision int64, at time.Time) error {
-	return s.setPublished(ctx, id, revision, at, false)
+// UnpublishPage снимает страницу с публикации.
+func (s *Storage) UnpublishPage(ctx context.Context, id int64, at time.Time) error {
+	return s.setPublished(ctx, id, at, false)
 }

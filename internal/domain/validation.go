@@ -9,5 +9,8 @@ import (
 // ErrInvalid обозначает нарушение инварианта модели.
 var ErrInvalid = errors.New("некорректная доменная модель")
 
+// invalid возвращает ошибку проверки данных.
 func invalid(field string) error { return fmt.Errorf("%w: %s", ErrInvalid, field) }
-func blank(s string) bool        { return strings.TrimSpace(s) == "" }
+
+// blank проверяет отсутствие непробельных символов.
+func blank(s string) bool { return strings.TrimSpace(s) == "" }

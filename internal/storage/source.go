@@ -9,47 +9,34 @@ import (
 	"github.com/ruwcs/wcs-guide/internal/domain"
 )
 
-// SourceRecord дополняет источник условиями согласованной записи.
-type SourceRecord struct {
-	Source       domain.Source // Текущее состояние источника.
-	EditRevision int64         // Редакция настроек и переключателей.
-	SyncRevision int64         // Редакция завершённых попыток получения.
-}
+// sourceColumns — столбцы источника для чтения из БД.
+const sourceColumns = "id,name,type,external_ref,fetch_params,update_interval_ns,auto_refresh,publication_blocked,last_attempt_at,last_success_at,last_error"
 
-// FetchToken фиксирует состояние перед внешним получением.
-type FetchToken struct {
-	SourceID     int64 // Идентификатор источника.
-	EditRevision int64 // Ожидаемая редакция настроек.
-	SyncRevision int64 // Ожидаемая редакция получения.
-}
-
-// sourceColumns задаёт единый порядок столбцов при чтении источника.
-const sourceColumns = "id,name,type,external_ref,fetch_params,update_interval_ns,auto_refresh,publication_blocked,last_attempt_at,last_success_at,last_error,edit_revision,sync_revision"
-
-func getSource(ctx context.Context, tx *sql.Tx, id int64) (SourceRecord, error) {
-	var record SourceRecord
+// getSource читает источник.
+func getSource(ctx context.Context, tx *sql.Tx, id int64) (domain.Source, error) {
+	var record domain.Source
 	var params, lastAttemptAt, lastSuccessAt sql.NullString
-	err := tx.QueryRowContext(ctx, "SELECT "+sourceColumns+" FROM sources WHERE id=?", id).Scan(&record.Source.ID, &record.Source.Name, &record.Source.Type, &record.Source.ExternalRef, &params, &record.Source.UpdateInterval, &record.Source.AutoRefresh, &record.Source.PublicationBlocked, &lastAttemptAt, &lastSuccessAt, &record.Source.Sync.LastError, &record.EditRevision, &record.SyncRevision)
+	err := tx.QueryRowContext(ctx, "SELECT "+sourceColumns+" FROM sources WHERE id=?", id).Scan(&record.ID, &record.Name, &record.Type, &record.ExternalRef, &params, &record.UpdateInterval, &record.AutoRefresh, &record.PublicationBlocked, &lastAttemptAt, &lastSuccessAt, &record.Sync.LastError)
 	if err != nil {
 		return record, err
 	}
-	record.Source.FetchParams, err = parseMap(params)
+	record.FetchParams, err = parseMap(params)
 	if err != nil {
 		return record, &internalError{err}
 	}
-	record.Source.Sync.LastAttemptAt, err = parsed(lastAttemptAt)
+	record.Sync.LastAttemptAt, err = parsed(lastAttemptAt)
 	if err != nil {
 		return record, &internalError{err}
 	}
-	record.Source.Sync.LastSuccessAt, err = parsed(lastSuccessAt)
+	record.Sync.LastSuccessAt, err = parsed(lastSuccessAt)
 	if err != nil {
 		return record, &internalError{err}
 	}
-	return record, record.Source.Validate()
+	return record, record.Validate()
 }
 
-// CreateSource сохраняет новый источник и возвращает назначенный ID.
-func (s *Storage) CreateSource(ctx context.Context, source domain.Source) (record SourceRecord, err error) {
+// CreateSource создаёт источник.
+func (s *Storage) CreateSource(ctx context.Context, source domain.Source) (record domain.Source, err error) {
 	if source.ID != 0 {
 		return record, invalid("source.id")
 	}
@@ -78,16 +65,18 @@ func (s *Storage) CreateSource(ctx context.Context, source domain.Source) (recor
 		return err
 	})
 	if err != nil {
-		record = SourceRecord{}
+		record = domain.Source{}
 	}
 	return
 }
 
-// GetSource читает источник вместе с редакциями.
-func (s *Storage) GetSource(ctx context.Context, id int64) (r SourceRecord, err error) {
+// GetSource читает источник.
+func (s *Storage) GetSource(ctx context.Context, id int64) (r domain.Source, err error) {
 	err = s.withTx(ctx, func(tx *sql.Tx) error { var err error; r, err = getSource(ctx, tx, id); return err })
 	return
 }
+
+// sourceIDs возвращает идентификаторы источников.
 func sourceIDs(ctx context.Context, tx *sql.Tx) ([]int64, error) {
 	rows, err := tx.QueryContext(ctx, "SELECT id FROM sources ORDER BY id")
 	if err != nil {
@@ -106,7 +95,7 @@ func sourceIDs(ctx context.Context, tx *sql.Tx) ([]int64, error) {
 }
 
 // ListSources возвращает источники в порядке ID.
-func (s *Storage) ListSources(ctx context.Context) (out []SourceRecord, err error) {
+func (s *Storage) ListSources(ctx context.Context) (out []domain.Source, err error) {
 	err = s.withTx(ctx, func(tx *sql.Tx) error {
 		ids, err := sourceIDs(ctx, tx)
 		if err != nil {
@@ -124,14 +113,14 @@ func (s *Storage) ListSources(ctx context.Context) (out []SourceRecord, err erro
 	return
 }
 
-// ListDueSources выбирает источники по последней завершённой попытке.
-func (s *Storage) ListDueSources(ctx context.Context, now time.Time) (out []SourceRecord, err error) {
+// ListDueSources возвращает источники, требующие обновления.
+func (s *Storage) ListDueSources(ctx context.Context, now time.Time) (out []domain.Source, err error) {
 	all, err := s.ListSources(ctx)
 	if err != nil {
 		return nil, err
 	}
 	for _, record := range all {
-		source := record.Source
+		source := record
 		if source.AutoRefresh && (source.Sync.LastAttemptAt.IsZero() || !now.Before(source.Sync.LastAttemptAt.Add(source.UpdateInterval))) {
 			out = append(out, record)
 		}
@@ -139,18 +128,23 @@ func (s *Storage) ListDueSources(ctx context.Context, now time.Time) (out []Sour
 	return
 }
 
-// UpdateSource меняет только название и параметры, сохраняя Sync и переключатели.
-func (s *Storage) UpdateSource(ctx context.Context, source domain.Source, revision int64, at time.Time) (out SourceRecord, err error) {
+// UpdateSource изменяет название и параметры получения источника.
+func (s *Storage) UpdateSource(ctx context.Context, source domain.Source, at time.Time) (out domain.Source, err error) {
 	err = s.withTx(ctx, func(tx *sql.Tx) error {
 		old, err := getSource(ctx, tx, source.ID)
 		if err != nil {
 			return err
 		}
-		if old.EditRevision != revision || old.Source.Type != source.Type || old.Source.ExternalRef != source.ExternalRef {
+		if old.Type != source.Type || old.ExternalRef != source.ExternalRef {
 			return ErrConflict
 		}
+		for _, key := range []string{"telegram_channel_id", "telegram_message_id"} {
+			if previous := old.FetchParams[key]; previous != "" && source.FetchParams[key] != previous {
+				return ErrConflict
+			}
+		}
 		ids, err := sourcePageIDs(ctx, tx, source.ID)
-		if old.Source.Name == source.Name {
+		if old.Name == source.Name {
 			ids = nil
 		}
 		if err != nil {
@@ -160,7 +154,7 @@ func (s *Storage) UpdateSource(ctx context.Context, source domain.Source, revisi
 		if err != nil {
 			return err
 		}
-		next := old.Source
+		next := old
 		next.Name = source.Name
 		next.FetchParams = source.FetchParams
 		if err = next.Validate(); err != nil {
@@ -170,48 +164,48 @@ func (s *Storage) UpdateSource(ctx context.Context, source domain.Source, revisi
 		if err != nil {
 			return err
 		}
-		if !reflect.DeepEqual(old.Source.FetchParams, next.FetchParams) || old.Source.Name != next.Name {
-			if _, err = tx.ExecContext(ctx, "UPDATE sources SET name=?,fetch_params=?,edit_revision=edit_revision+1 WHERE id=?", next.Name, params, source.ID); err != nil {
+		if !reflect.DeepEqual(old.FetchParams, next.FetchParams) || old.Name != next.Name {
+			if _, err = tx.ExecContext(ctx, "UPDATE sources SET name=?,fetch_params=? WHERE id=?", next.Name, params, source.ID); err != nil {
 				return err
 			}
 		}
-		if err = refreshPublic(ctx, tx, ids, before, at, false); err != nil {
+		if err = refreshPublic(ctx, tx, ids, before, at); err != nil {
 			return err
 		}
 		out, err = getSource(ctx, tx, source.ID)
 		return err
 	})
 	if err != nil {
-		out = SourceRecord{}
+		out = domain.Source{}
 	}
 	return
 }
 
-// SetAutoRefresh изменяет только периодичность и разрешение обновления.
+// SetAutoRefresh изменяет настройки автоматического обновления.
 func (s *Storage) SetAutoRefresh(ctx context.Context, id int64, enabled bool, interval time.Duration) error {
 	return s.withTx(ctx, func(tx *sql.Tx) error {
 		record, err := getSource(ctx, tx, id)
 		if err != nil {
 			return err
 		}
-		record.Source.AutoRefresh = enabled
-		record.Source.UpdateInterval = interval
-		if err = record.Source.Validate(); err != nil {
+		record.AutoRefresh = enabled
+		record.UpdateInterval = interval
+		if err = record.Validate(); err != nil {
 			return err
 		}
-		_, err = tx.ExecContext(ctx, "UPDATE sources SET auto_refresh=?,update_interval_ns=?,edit_revision=edit_revision+1 WHERE id=?", enabled, interval, id)
+		_, err = tx.ExecContext(ctx, "UPDATE sources SET auto_refresh=?,update_interval_ns=? WHERE id=?", enabled, interval, id)
 		return err
 	})
 }
 
-// SetPublicationBlocked меняет независимый запрет и публичные даты затронутых страниц.
+// SetPublicationBlocked изменяет запрет публикации содержимого источника.
 func (s *Storage) SetPublicationBlocked(ctx context.Context, id int64, blocked bool, at time.Time) error {
 	return s.withTx(ctx, func(tx *sql.Tx) error {
 		record, err := getSource(ctx, tx, id)
 		if err != nil {
 			return err
 		}
-		if record.Source.PublicationBlocked == blocked {
+		if record.PublicationBlocked == blocked {
 			return nil
 		}
 		ids, err := sourcePageIDs(ctx, tx, id)
@@ -222,49 +216,34 @@ func (s *Storage) SetPublicationBlocked(ctx context.Context, id int64, blocked b
 		if err != nil {
 			return err
 		}
-		_, err = tx.ExecContext(ctx, "UPDATE sources SET publication_blocked=?,edit_revision=edit_revision+1 WHERE id=?", blocked, id)
+		_, err = tx.ExecContext(ctx, "UPDATE sources SET publication_blocked=? WHERE id=?", blocked, id)
 		if err != nil {
 			return err
 		}
-		if !blocked {
-			if err = publishReadyForSource(ctx, tx, id, at); err != nil {
-				return err
-			}
-		}
-		return refreshPublic(ctx, tx, ids, before, at, blocked)
+		return refreshPublic(ctx, tx, ids, before, at)
 	})
 }
 
-// GetFetchInput возвращает источник и токен перед сетевой работой.
-func (s *Storage) GetFetchInput(ctx context.Context, id int64) (v domain.Source, t FetchToken, err error) {
-	r, err := s.GetSource(ctx, id)
-	if err != nil {
-		return v, t, err
-	}
-	return r.Source, FetchToken{id, r.EditRevision, r.SyncRevision}, nil
-}
-func checkFetch(ctx context.Context, tx *sql.Tx, fetchToken FetchToken) (SourceRecord, error) {
-	record, err := getSource(ctx, tx, fetchToken.SourceID)
-	if err == nil && (record.EditRevision != fetchToken.EditRevision || record.SyncRevision != fetchToken.SyncRevision) {
-		err = ErrConflict
-	}
-	return record, err
-}
-
-// SaveFetchFailure сохраняет безопасное описание неудачи без изменения настроек.
-func (s *Storage) SaveFetchFailure(ctx context.Context, fetchToken FetchToken, at time.Time, message string) error {
+// SaveFetchResult сохраняет результат получения источника.
+func (s *Storage) SaveFetchResult(ctx context.Context, sourceID int64, at time.Time, message string) error {
 	return s.withTx(ctx, func(tx *sql.Tx) error {
-		record, err := checkFetch(ctx, tx, fetchToken)
+		source, err := getSource(ctx, tx, sourceID)
 		if err != nil {
 			return err
 		}
 		if err = validTime(at); err != nil {
 			return err
 		}
-		if err = record.Source.Sync.RecordFailure(at, message); err != nil {
+		if message == "" {
+			err = source.Sync.RecordSuccess(at)
+		} else {
+			err = source.Sync.RecordFailure(at, message)
+		}
+		if err != nil {
 			return err
 		}
-		_, err = tx.ExecContext(ctx, "UPDATE sources SET last_attempt_at=?,last_error=?,sync_revision=sync_revision+1 WHERE id=?", stamp(at), message, fetchToken.SourceID)
+		_, err = tx.ExecContext(ctx, `UPDATE sources
+   SET last_attempt_at=?, last_success_at=?, last_error=? WHERE id=?`, stamp(source.Sync.LastAttemptAt), stamp(source.Sync.LastSuccessAt), source.Sync.LastError, sourceID)
 		return err
 	})
 }
