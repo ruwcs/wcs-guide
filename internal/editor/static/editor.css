@@ -1,0 +1,4 @@
+body { margin: 3rem; color: #202124; background: #f6f7f9; font: 17px system-ui, sans-serif; }
+main { max-width: 42rem; padding: 2rem; background: white; border: 1px solid #ddd; }
+label { display: block; } input { display: block; width: 30rem; padding: .6rem; margin: .5rem 0 1rem; }
+button { padding: .6rem 1rem; cursor: pointer; } a { color: #174ea6; } #status { color: #9b1c1c; }

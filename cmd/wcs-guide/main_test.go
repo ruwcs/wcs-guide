@@ -61,7 +61,8 @@ func TestStartupReadOnlyDatabase(t *testing.T) {
 	os.Args = []string{"wcs-guide"}
 	var logs bytes.Buffer
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
-	t.Setenv("BASE_URL", "http://localhost:8080")
+	t.Setenv("BASE_URL", "http://127.0.0.1:8080")
+	t.Setenv("EDITOR_BASE_URL", "http://localhost:8080")
 	t.Setenv("DB_PATH", path)
 	t.Setenv("TELEGRAM_API_ID", "123")
 	t.Setenv("TELEGRAM_API_HASH", strings.Repeat("a", 32))

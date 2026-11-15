@@ -10,7 +10,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/ruwcs/wcs-guide/internal/auth"
 	"github.com/ruwcs/wcs-guide/internal/config"
+	"github.com/ruwcs/wcs-guide/internal/editor"
 	"github.com/ruwcs/wcs-guide/internal/importer"
 	"github.com/ruwcs/wcs-guide/internal/storage"
 	"github.com/ruwcs/wcs-guide/internal/telegram"
@@ -57,6 +59,15 @@ func (app *App) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	service, err := auth.New(store, cfg.EditorBaseURL)
+	if err != nil {
+		return err
+	}
+	editorHandler, err := editor.New(service, cfg.EditorBaseURL, logger)
+	if err != nil {
+		return err
+	}
+	handler = hostRouter(cfg.BaseURL, cfg.EditorBaseURL, handler, editorHandler)
 	listener, err := net.Listen("tcp", httpAddr)
 	if err != nil {
 		return fmt.Errorf("запуск HTTP: %w", err)

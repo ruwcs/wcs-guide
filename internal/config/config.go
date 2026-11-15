@@ -13,6 +13,7 @@ import (
 
 // Config — конфигурация приложения.
 type Config struct {
+	EditorBaseURL       url.URL       // Адрес редакторского интерфейса.
 	RefreshInterval     time.Duration // Интервал автоматического обновления источников.
 	BaseURL             url.URL       // Адрес сайта, например "https://wcs.guide".
 	DBPath              string        // Путь к файлу базы данных.
@@ -57,6 +58,37 @@ func Load(lookup func(string) (string, bool)) (Config, error) {
 	parsed.Scheme = strings.ToLower(parsed.Scheme)
 	parsed.Path = ""
 	cfg.BaseURL = *parsed
+	editor, err := required("EDITOR_BASE_URL")
+	if err != nil {
+		return cfg, err
+	}
+	editorURL, err := url.Parse(editor)
+	if err != nil || editorURL.Hostname() == "" || editorURL.User != nil || editorURL.Opaque != "" || editorURL.RawQuery != "" || editorURL.ForceQuery || strings.ContainsAny(editor, "#\\") || editorURL.RawPath != "" || (editorURL.Path != "" && editorURL.Path != "/") || strings.ContainsFunc(editor, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) {
+		return cfg, fmt.Errorf("EDITOR_BASE_URL: требуется корневой URL редактора")
+	}
+	editorURL.Scheme = strings.ToLower(editorURL.Scheme)
+	if editorURL.Scheme != "https" && !(editorURL.Scheme == "http" && strings.EqualFold(editorURL.Hostname(), "localhost")) {
+		return cfg, fmt.Errorf("EDITOR_BASE_URL: требуется HTTPS или HTTP localhost")
+	}
+	if port := editorURL.Port(); port != "" {
+		number, err := strconv.Atoi(port)
+		if err != nil || number < 1 || number > 65535 {
+			return cfg, fmt.Errorf("EDITOR_BASE_URL: некорректный порт")
+		}
+	}
+	editorURL.Path = ""
+	editorURL.Host = strings.ToLower(editorURL.Host)
+	if editorURL.Scheme == "https" && editorURL.Port() == "443" {
+		editorURL.Host = strings.TrimSuffix(editorURL.Host, ":443")
+	}
+	if editorURL.Scheme == "http" && editorURL.Port() == "80" {
+		editorURL.Host = strings.TrimSuffix(editorURL.Host, ":80")
+	}
+	if strings.EqualFold(editorURL.Hostname(), parsed.Hostname()) {
+		return cfg, fmt.Errorf("адреса публичного сайта и редактора должны различаться")
+	}
+	cfg.EditorBaseURL = *editorURL
+
 	cfg.DBPath, err = LoadDBPath(lookup)
 	if err != nil {
 		return cfg, err

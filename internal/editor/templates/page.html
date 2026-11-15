@@ -1,0 +1,13 @@
+{{define "page"}}<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>WCS Guide Editor</title>
+<link rel="stylesheet" href="/static/editor.css"><script src="/static/editor.js" defer></script></head>
+<body><main><h1>WCS Guide Editor</h1>
+{{if eq .Kind "home"}}<p>{{.User.DisplayName}}</p><p>Роль: {{.User.Role}}</p>
+<form method="post" action="/logout"><button>Выйти</button></form>
+{{else}}<h2>{{if eq .Kind "login"}}Вход{{else}}Регистрация Passkey{{end}}</h2>
+<form id="auth-form" method="post" data-kind="{{.Kind}}"><label>{{if eq .Kind "login"}}Логин{{else}}Регистрационный код{{end}}
+<input name="value" required autocomplete="off" maxlength="256"></label><button>Продолжить</button></form>
+<p id="status" role="status" aria-live="polite"></p>
+<noscript>Для Passkeys необходимо включить JavaScript.</noscript>
+{{if eq .Kind "login"}}<a href="/register">Регистрация по коду</a>{{else}}<a href="/login">Войти</a>{{end}}{{end}}
+</main></body></html>{{end}}

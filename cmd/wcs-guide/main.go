@@ -17,7 +17,7 @@ func main() { os.Exit(run()) }
 // run выполняет основной сценарий программы.
 func run() int {
 	logger := slog.Default()
-	if len(os.Args) != 1 {
+	if len(os.Args) != 1 && (len(os.Args) < 4 || os.Args[1] != "admin" || (os.Args[2] != "bootstrap" && os.Args[2] != "recover")) {
 		logger.Error("[app] команды не поддерживаются")
 		return 2
 	}
@@ -28,6 +28,13 @@ func run() int {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if len(os.Args) > 1 {
+		if err := adminCommand(ctx, cfg, os.Args[1:], os.Stdout); err != nil {
+			logger.Error("[admin] операция не выполнена", "error", err)
+			return 1
+		}
+		return 0
+	}
 	application, err := app.New(ctx, cfg, logger)
 	if err != nil {
 		logger.Error("[app] ошибка инициализации", "error", err)
