@@ -67,11 +67,11 @@ func TestImportedReplacement(t *testing.T) {
 	id := page.Blocks[1].ID
 	_, err := store.GetPublicPage(ctx, page.Path)
 	wantError(t, err, ErrNotFound)
-	must(t, store.SaveImportedContent(ctx, id, source.ID, "A", clock()))
+	must(t, saveContent(store, ctx, id, source.ID, "A", clock()))
 	must(t, store.PublishPage(ctx, page.ID, clock()))
 	for index, body := range []string{"B", "A", "A"} {
 		at := clock().Add(time.Duration(index+1) * time.Hour)
-		must(t, store.SaveImportedContent(ctx, id, source.ID, body, at))
+		must(t, saveContent(store, ctx, id, source.ID, body, at))
 		public, err := store.GetPublicPage(ctx, page.Path)
 		must(t, err)
 		if public.Blocks[1].Content != body {
@@ -151,7 +151,7 @@ func TestChangedImportSettings(t *testing.T) {
 	other := makeSource(t, store, "https://example.org/b")
 	page := makePage(t, store, source.ID)
 	id := page.Blocks[1].ID
-	must(t, store.SaveImportedContent(ctx, id, source.ID, "старое", clock()))
+	must(t, saveContent(store, ctx, id, source.ID, "старое", clock()))
 	page, err := store.GetPage(ctx, page.ID)
 	must(t, err)
 	page.Blocks[1].Import.Rules.Start.Text = "якорь"
@@ -166,5 +166,63 @@ func TestChangedImportSettings(t *testing.T) {
 	if page.Blocks[1].Prepared != nil {
 		t.Fatal("сохранился результат другого источника")
 	}
-	wantError(t, store.SaveImportedContent(ctx, id, source.ID, "неверный источник", clock()), ErrConflict)
+	wantError(t, saveContent(store, ctx, id, source.ID, "неверный источник", clock()), ErrConflict)
+}
+
+// saveContent сохраняет тестовый результат импорта.
+func saveContent(store *Storage, ctx context.Context, id, sourceID int64, body string, at time.Time) error {
+	source, err := store.GetSource(ctx, sourceID)
+	if err != nil {
+		return err
+	}
+	var block domain.Block
+	err = store.withTx(ctx, func(tx *sql.Tx) error { var err error; block, err = getBlock(ctx, tx, id); return err })
+	if err != nil {
+		return err
+	}
+	if block.Import == nil {
+		return ErrConflict
+	}
+	_, err = store.SaveImportedContent(ctx, id, source, *block.Import, body, at)
+	return err
+}
+
+// TestImportGuards проверяет актуальность настроек и ошибки блока.
+func TestImportGuards(t *testing.T) {
+	store, _ := openTest(t)
+	source := makeSource(t, store, "guard")
+	page := makePage(t, store, source.ID)
+	block := page.Blocks[1]
+	settings := *block.Import
+	must(t, store.SaveBlockImportError(ctx, block.ID, source, settings, "extraction: anchor_not_found"))
+	page, err := store.GetPage(ctx, page.ID)
+	must(t, err)
+	if page.Blocks[1].ImportError == "" {
+		t.Fatal("потеряна ошибка")
+	}
+	_, err = store.SaveImportedContent(ctx, block.ID, source, settings, "готово", clock())
+	must(t, err)
+	page, err = store.GetPage(ctx, page.ID)
+	must(t, err)
+	if page.Blocks[1].ImportError != "" {
+		t.Fatal("ошибка не очищена")
+	}
+	page.Blocks[1].Import.Rules.Start.Text = "новый якорь"
+	_, err = store.SavePage(ctx, page, clock())
+	must(t, err)
+	_, err = store.SaveImportedContent(ctx, block.ID, source, settings, "устаревшее", clock())
+	wantError(t, err, ErrConflict)
+	wantError(t, store.SaveBlockImportError(ctx, block.ID, source, settings, "устаревшая ошибка"), ErrConflict)
+	changed := source
+	changed.FetchParams = map[string]string{"mode": "new"}
+	_, err = store.UpdateSource(ctx, changed, clock())
+	must(t, err)
+	wantError(t, store.SaveFetchResult(ctx, source, clock(), ""), ErrConflict)
+	page, err = store.GetPage(ctx, page.ID)
+	must(t, err)
+	page.Blocks = nil
+	_, err = store.SavePage(ctx, page, clock())
+	must(t, err)
+	_, err = store.SaveImportedContent(ctx, block.ID, changed, settings, "удаленный блок", clock())
+	wantError(t, err, ErrNotFound)
 }

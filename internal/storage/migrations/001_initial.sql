@@ -10,7 +10,6 @@ CREATE TABLE sources (
         )
     ),
 
-    update_interval_ns INTEGER NOT NULL CHECK (update_interval_ns >= 0),
     auto_refresh INTEGER NOT NULL DEFAULT 0 CHECK (auto_refresh IN (0, 1)),
     publication_blocked INTEGER NOT NULL DEFAULT 0
         CHECK (publication_blocked IN (0, 1)),
@@ -20,7 +19,6 @@ CREATE TABLE sources (
     last_error TEXT NOT NULL DEFAULT '',
 
     UNIQUE (type, external_ref),
-    CHECK (auto_refresh = 0 OR update_interval_ns > 0),
     CHECK (
         (
             last_attempt_at IS NULL
@@ -84,6 +82,7 @@ CREATE TABLE blocks (
     text TEXT NOT NULL DEFAULT '',
     imported_content TEXT,
     imported_at TEXT,
+    import_error TEXT NOT NULL DEFAULT '',
     source_id INTEGER REFERENCES sources(id) ON DELETE RESTRICT,
 
     start_anchor TEXT NOT NULL DEFAULT '',

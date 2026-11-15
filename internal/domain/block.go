@@ -18,12 +18,13 @@ const (
 
 // Block — блок содержимого страницы.
 type Block struct {
-	ID       int64            // Идентификатор блока.
-	PageID   int64            // Идентификатор страницы блока.
-	Type     BlockType        // Вид содержимого блока.
-	Text     string           // Markdown ручного блока.
-	Import   *ImportSettings  // Источник и правила импорта; nil для ручного блока.
-	Prepared *PreparedContent // Последний успешный результат; nil до первой подготовки.
+	ImportError string           // Последняя ошибка подготовки импортируемого блока.
+	ID          int64            // Идентификатор блока.
+	PageID      int64            // Идентификатор страницы блока.
+	Type        BlockType        // Вид содержимого блока.
+	Text        string           // Markdown ручного блока.
+	Import      *ImportSettings  // Источник и правила импорта; nil для ручного блока.
+	Prepared    *PreparedContent // Последний успешный результат; nil до первой подготовки.
 }
 
 // ImportSettings — настройки импорта блока.
@@ -56,12 +57,12 @@ func (p PreparedContent) Validate() error {
 
 // Validate проверяет совместимость полей с типом блока.
 func (b Block) Validate() error {
-	if b.ID < 0 || b.PageID < 0 {
+	if b.ID < 0 || b.PageID < 0 || !utf8.ValidString(b.ImportError) {
 		return invalid("Block.identity")
 	}
 	switch b.Type {
 	case BlockText:
-		if b.Import != nil || b.Prepared != nil || !utf8.ValidString(b.Text) {
+		if b.Import != nil || b.Prepared != nil || b.ImportError != "" || !utf8.ValidString(b.Text) {
 			return invalid("Block.text")
 		}
 	case BlockImported:

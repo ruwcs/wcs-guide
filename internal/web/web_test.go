@@ -157,7 +157,7 @@ func TestBlockedSourceAndFixtures(t *testing.T) {
 		t.Fatal(err)
 	}
 	block := record.Blocks[1]
-	if err := store.SaveImportedContent(ctx, block.ID, source.ID, "IMPORTED_MARKER", at); err != nil {
+	if _, err := store.SaveImportedContent(ctx, block.ID, source, *block.Import, "IMPORTED_MARKER", at); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.PublishPage(ctx, record.ID, at); err != nil {

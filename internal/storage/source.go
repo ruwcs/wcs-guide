@@ -10,13 +10,13 @@ import (
 )
 
 // sourceColumns — столбцы источника для чтения из БД.
-const sourceColumns = "id,name,type,external_ref,fetch_params,update_interval_ns,auto_refresh,publication_blocked,last_attempt_at,last_success_at,last_error"
+const sourceColumns = "id,name,type,external_ref,fetch_params,auto_refresh,publication_blocked,last_attempt_at,last_success_at,last_error"
 
 // getSource читает источник.
 func getSource(ctx context.Context, tx *sql.Tx, id int64) (domain.Source, error) {
 	var record domain.Source
 	var params, lastAttemptAt, lastSuccessAt sql.NullString
-	err := tx.QueryRowContext(ctx, "SELECT "+sourceColumns+" FROM sources WHERE id=?", id).Scan(&record.ID, &record.Name, &record.Type, &record.ExternalRef, &params, &record.UpdateInterval, &record.AutoRefresh, &record.PublicationBlocked, &lastAttemptAt, &lastSuccessAt, &record.Sync.LastError)
+	err := tx.QueryRowContext(ctx, "SELECT "+sourceColumns+" FROM sources WHERE id=?", id).Scan(&record.ID, &record.Name, &record.Type, &record.ExternalRef, &params, &record.AutoRefresh, &record.PublicationBlocked, &lastAttemptAt, &lastSuccessAt, &record.Sync.LastError)
 	if err != nil {
 		return record, err
 	}
@@ -52,8 +52,8 @@ func (s *Storage) CreateSource(ctx context.Context, source domain.Source) (recor
 	}
 	err = s.withTx(ctx, func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, `INSERT INTO sources (name, type, external_ref, fetch_params,
-        update_interval_ns, auto_refresh, publication_blocked)
-        VALUES (?, ?, ?, ?, ?, ?, ?)`, source.Name, source.Type, source.ExternalRef, params, source.UpdateInterval, source.AutoRefresh, source.PublicationBlocked)
+         auto_refresh, publication_blocked)
+        VALUES (?, ?, ?, ?, ?, ?)`, source.Name, source.Type, source.ExternalRef, params, source.AutoRefresh, source.PublicationBlocked)
 		if err != nil {
 			return err
 		}
@@ -113,15 +113,15 @@ func (s *Storage) ListSources(ctx context.Context) (out []domain.Source, err err
 	return
 }
 
-// ListDueSources возвращает источники, требующие обновления.
-func (s *Storage) ListDueSources(ctx context.Context, now time.Time) (out []domain.Source, err error) {
+// ListAutoRefreshSources возвращает источники с автоматическим обновлением.
+func (s *Storage) ListAutoRefreshSources(ctx context.Context) (out []domain.Source, err error) {
 	all, err := s.ListSources(ctx)
 	if err != nil {
 		return nil, err
 	}
 	for _, record := range all {
 		source := record
-		if source.AutoRefresh && (source.Sync.LastAttemptAt.IsZero() || !now.Before(source.Sync.LastAttemptAt.Add(source.UpdateInterval))) {
+		if source.AutoRefresh {
 			out = append(out, record)
 		}
 	}
@@ -182,18 +182,17 @@ func (s *Storage) UpdateSource(ctx context.Context, source domain.Source, at tim
 }
 
 // SetAutoRefresh изменяет настройки автоматического обновления.
-func (s *Storage) SetAutoRefresh(ctx context.Context, id int64, enabled bool, interval time.Duration) error {
+func (s *Storage) SetAutoRefresh(ctx context.Context, id int64, enabled bool) error {
 	return s.withTx(ctx, func(tx *sql.Tx) error {
 		record, err := getSource(ctx, tx, id)
 		if err != nil {
 			return err
 		}
 		record.AutoRefresh = enabled
-		record.UpdateInterval = interval
 		if err = record.Validate(); err != nil {
 			return err
 		}
-		_, err = tx.ExecContext(ctx, "UPDATE sources SET auto_refresh=?,update_interval_ns=? WHERE id=?", enabled, interval, id)
+		_, err = tx.ExecContext(ctx, "UPDATE sources SET auto_refresh=? WHERE id=?", enabled, id)
 		return err
 	})
 }
@@ -225,9 +224,9 @@ func (s *Storage) SetPublicationBlocked(ctx context.Context, id int64, blocked b
 }
 
 // SaveFetchResult сохраняет результат получения источника.
-func (s *Storage) SaveFetchResult(ctx context.Context, sourceID int64, at time.Time, message string) error {
+func (s *Storage) SaveFetchResult(ctx context.Context, expected domain.Source, at time.Time, message string) error {
 	return s.withTx(ctx, func(tx *sql.Tx) error {
-		source, err := getSource(ctx, tx, sourceID)
+		source, err := checkSource(ctx, tx, expected)
 		if err != nil {
 			return err
 		}
@@ -243,7 +242,16 @@ func (s *Storage) SaveFetchResult(ctx context.Context, sourceID int64, at time.T
 			return err
 		}
 		_, err = tx.ExecContext(ctx, `UPDATE sources
-   SET last_attempt_at=?, last_success_at=?, last_error=? WHERE id=?`, stamp(source.Sync.LastAttemptAt), stamp(source.Sync.LastSuccessAt), source.Sync.LastError, sourceID)
+   SET last_attempt_at=?, last_success_at=?, last_error=? WHERE id=?`, stamp(source.Sync.LastAttemptAt), stamp(source.Sync.LastSuccessAt), source.Sync.LastError, expected.ID)
 		return err
 	})
+}
+
+// checkSource проверяет настройки получения источника.
+func checkSource(ctx context.Context, tx *sql.Tx, expected domain.Source) (domain.Source, error) {
+	source, err := getSource(ctx, tx, expected.ID)
+	if err == nil && (source.Type != expected.Type || source.ExternalRef != expected.ExternalRef || !reflect.DeepEqual(source.FetchParams, expected.FetchParams)) {
+		err = ErrConflict
+	}
+	return source, err
 }

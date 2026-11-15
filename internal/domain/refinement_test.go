@@ -10,7 +10,7 @@ import (
 func TestPublicationBlockedIndependent(t *testing.T) {
 	for _, auto := range []bool{false, true} {
 		for _, blocked := range []bool{false, true} {
-			s := Source{Name: "источник", Type: SourceTelegramPost, ExternalRef: "публикация", UpdateInterval: time.Hour, AutoRefresh: auto, PublicationBlocked: blocked}
+			s := Source{Name: "источник", Type: SourceTelegramPost, ExternalRef: "публикация", AutoRefresh: auto, PublicationBlocked: blocked}
 			if err := s.Validate(); err != nil {
 				t.Fatal(err)
 			}

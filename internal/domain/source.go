@@ -31,7 +31,6 @@ type Source struct {
 	Type               SourceType        // Способ получения содержимого.
 	ExternalRef        string            // URL или внешний идентификатор публикации.
 	FetchParams        map[string]string // Параметры получения содержимого.
-	UpdateInterval     time.Duration     // Интервал автоматического обновления.
 	AutoRefresh        bool              // Разрешение автоматического обновления.
 	PublicationBlocked bool              // Запрет публичного отображения содержимого источника.
 	Sync               SyncState         // Состояние последней завершённой попытки.
@@ -102,9 +101,6 @@ func (s *SyncState) RecordFailure(at time.Time, message string) error {
 func (s Source) Validate() error {
 	if s.ID < 0 || blank(s.Name) || s.Type != SourceTelegramPost || blank(s.ExternalRef) {
 		return invalid("Source.identity")
-	}
-	if s.UpdateInterval < 0 || (s.AutoRefresh && s.UpdateInterval == 0) {
-		return invalid("Source.interval")
 	}
 	return s.Sync.Validate()
 }

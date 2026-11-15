@@ -220,6 +220,11 @@ func (s *Storage) SavePage(ctx context.Context, page domain.Page, at time.Time) 
 				return ErrConflict
 			}
 			if block.Type == domain.BlockImported {
+				if *prev.Import != *block.Import {
+					if _, err = tx.ExecContext(ctx, "UPDATE blocks SET import_error='' WHERE id=?", block.ID); err != nil {
+						return err
+					}
+				}
 				if prev.Import.SourceID != block.Import.SourceID {
 					if _, err = tx.ExecContext(ctx, "UPDATE blocks SET imported_content=NULL,imported_at=NULL WHERE id=?", block.ID); err != nil {
 						return err

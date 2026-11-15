@@ -84,13 +84,12 @@ func TestSourceValidation(t *testing.T) {
 	if err := valid.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	for _, change := range []func(*Source){func(s *Source) { s.ID = -1 }, func(s *Source) { s.Name = " " }, func(s *Source) { s.Type = "unknown" }, func(s *Source) { s.ExternalRef = "" }, func(s *Source) { s.AutoRefresh = true }, func(s *Source) { s.UpdateInterval = -1 }} {
+	for _, change := range []func(*Source){func(s *Source) { s.ID = -1 }, func(s *Source) { s.Name = " " }, func(s *Source) { s.Type = "unknown" }, func(s *Source) { s.ExternalRef = "" }} {
 		s := valid
 		change(&s)
 		requireInvalid(t, s.Validate())
 	}
 	valid.AutoRefresh = true
-	valid.UpdateInterval = time.Hour
 	if err := valid.Validate(); err != nil {
 		t.Fatal(err)
 	}
