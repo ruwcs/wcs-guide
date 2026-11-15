@@ -9,19 +9,19 @@ import (
 	"unicode/utf8"
 )
 
-// Diagnostic описывает упрощение без исходного текста и адресов.
+// Diagnostic — сообщение об упрощении форматирования.
 type Diagnostic struct {
 	Code      string // Стабильная причина изменения.
 	SpanIndex int    // Номер диапазона нормализованного входа; -1 для общей причины.
 }
 
-// MarkdownResult содержит подготовленный Markdown и диагностики.
+// MarkdownResult — результат преобразования документа в Markdown.
 type MarkdownResult struct {
 	Text        string       // Текст для последующего сохранения.
 	Diagnostics []Diagnostic // Сообщения об упрощении оформления.
 }
 
-// ToMarkdown преобразует форматирование без выполнения инструкций и сетевых операций.
+// ToMarkdown преобразует документ в Markdown.
 func ToMarkdown(input Document) (MarkdownResult, error) {
 	document, err := Normalize(input.Text, input.Spans)
 	if err != nil {
@@ -245,8 +245,14 @@ func ToMarkdown(input Document) (MarkdownResult, error) {
 	}
 	return result, nil
 }
-func decorative(kind SpanKind) bool       { return kind == Bold || kind == Italic || kind == Strike }
+
+// decorative определяет декоративное форматирование.
+func decorative(kind SpanKind) bool { return kind == Bold || kind == Italic || kind == Strike }
+
+// lineStart проверяет начало строки.
 func lineStart(text string, pos int) bool { return pos == 0 || text[pos-1] == '\n' }
+
+// emphasisBoundary проверяет возможность выделения фрагмента в Markdown.
 func emphasisBoundary(text string, span Span) bool {
 	first, _ := utf8.DecodeRuneInString(text[span.Start:])
 	last, _ := utf8.DecodeLastRuneInString(text[:span.End])
@@ -267,6 +273,8 @@ func emphasisBoundary(text string, span Span) bool {
 	}
 	return true
 }
+
+// longestTicks возвращает длину самой длинной последовательности обратных кавычек.
 func longestTicks(text string) int {
 	best, run := 0, 0
 	for _, r := range text {
@@ -279,6 +287,8 @@ func longestTicks(text string) int {
 	}
 	return best
 }
+
+// safeURL проверяет допустимость адреса ссылки.
 func safeURL(raw string) (string, bool) {
 	if !utf8.ValidString(raw) || strings.ContainsFunc(raw, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) || r == '\\' }) {
 		return "", false
@@ -289,6 +299,8 @@ func safeURL(raw string) (string, bool) {
 	}
 	return strings.NewReplacer("&", "&amp;", "<", "%3C", ">", "%3E").Replace(parsed.String()), true
 }
+
+// plain экранирует текст и сохраняет переносы строк.
 func plain(text string, leading bool, continues bool) string {
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	var out strings.Builder

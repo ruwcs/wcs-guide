@@ -1,4 +1,4 @@
-// Package content извлекает форматированный текст и преобразует его в Markdown без ввода-вывода.
+// Package content извлекает форматированный текст и преобразует его в Markdown.
 package content
 
 import (
@@ -17,7 +17,7 @@ const (
 	MaxMarkdown = 8 << 20 // Максимальный размер результата в байтах.
 )
 
-// SpanKind обозначает вид оформления.
+// SpanKind — вид форматирования текста.
 type SpanKind string
 
 const (
@@ -34,38 +34,39 @@ const (
 	Heading     SpanKind = "heading"      // Явно заданный заголовок.
 )
 
-// Document хранит видимый текст и диапазоны оформления.
+// Document — форматированный текст.
 type Document struct {
 	Text  string // Оригинальный текст UTF-8.
 	Spans []Span // Диапазоны в байтовых координатах.
 }
 
-// Span задаёт полуоткрытый диапазон между кодпоинтами UTF-8.
+// Span — форматирование фрагмента текста.
+// Диапазон [Start, End) задаётся в байтах по границам символов UTF-8.
 type Span struct {
 	Start int      // Начальная позиция в байтах.
 	End   int      // Конечная позиция в байтах, не включённая в диапазон.
 	Kind  SpanKind // Вид оформления.
-	URL   string   // Адрес только для ссылки.
+	URL   string   // Адрес гиперссылки.
 }
 
 var (
-	// ErrInvalidDocument означает некорректный текст или диапазоны документа.
+	// ErrInvalidDocument — некорректный текст или диапазоны документа.
 	ErrInvalidDocument = errors.New("content: некорректный документ")
-	// ErrUnsupported означает неподдерживаемое представление содержимого.
+	// ErrUnsupported — неподдерживаемое представление содержимого.
 	ErrUnsupported = errors.New("content: неподдерживаемое представление")
-	// ErrLimitExceeded означает превышение допустимого объёма или сложности.
+	// ErrLimitExceeded — превышение допустимого объёма или сложности.
 	ErrLimitExceeded = errors.New("content: превышено ограничение")
-	// ErrAnchorNotFound означает отсутствие заданного якоря в тексте.
+	// ErrAnchorNotFound — отсутствие заданного якоря в тексте.
 	ErrAnchorNotFound = errors.New("content: якорь не найден")
-	// ErrAnchorAmbiguous означает несколько совпадений заданного якоря.
+	// ErrAnchorAmbiguous — несколько совпадений заданного якоря.
 	ErrAnchorAmbiguous = errors.New("content: неоднозначный якорь")
-	// ErrAnchorOrder означает недопустимый порядок строк якорей.
+	// ErrAnchorOrder — недопустимый порядок строк якорей.
 	ErrAnchorOrder = errors.New("content: неверный порядок границ")
-	// ErrEmptyResult защищает от публикации неожиданно пустого извлечения.
+	// ErrEmptyResult — пустой результат извлечения.
 	ErrEmptyResult = errors.New("content: пустой результат")
 )
 
-// Normalize проверяет текст и копирует диапазоны, не меняя координаты и содержимое.
+// Normalize создаёт документ из текста и диапазонов форматирования.
 func Normalize(text string, spans []Span) (Document, error) {
 	if len(text) > MaxText || len(spans) > MaxSpans {
 		return Document{}, ErrLimitExceeded
@@ -130,5 +131,9 @@ func Normalize(text string, spans []Span) (Document, error) {
 	}
 	return result, nil
 }
+
+// boundary проверяет границу символа UTF-8.
 func boundary(text string, pos int) bool { return pos == len(text) || utf8.RuneStart(text[pos]) }
-func blank(text string) bool             { return strings.TrimSpace(text) == "" }
+
+// blank проверяет отсутствие непробельных символов.
+func blank(text string) bool { return strings.TrimSpace(text) == "" }

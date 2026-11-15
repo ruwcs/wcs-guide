@@ -2,7 +2,7 @@ package content
 
 import "strings"
 
-// renderSections отделяет блочные элементы и абзацы без построения дерева документа.
+// renderSections формирует абзацы, цитаты и блоки кода.
 func renderSections(text string, spans []Span, inline func(int, int, []Span) (string, error), warn func(string, int)) (string, error) {
 	project := func(start, end int, ranges []Span) []Span {
 		var result []Span

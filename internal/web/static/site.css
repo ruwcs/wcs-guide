@@ -1,0 +1,12 @@
+:root { color-scheme: light; font: 1.1rem/1.65 system-ui, sans-serif; color: #202c35; background: #fff; }
+body { max-width: 48rem; margin: auto; padding: 1rem; overflow-wrap: anywhere; }
+header, footer { padding: 1rem 0; border-bottom: 1px solid #ccd5dc; }
+footer { border-top: 1px solid #ccd5dc; border-bottom: 0; font-size: .85rem; }
+a { color: #0058a3; text-underline-offset: .15em; }
+a:focus-visible { outline: 3px solid #0058a3; outline-offset: 3px; }
+h1, h2, h3 { line-height: 1.25; }
+pre { overflow-x: auto; padding: 1rem; background: #f0f3f5; overflow-wrap: normal; }
+code { font-family: ui-monospace, monospace; }
+blockquote { border-left: .25rem solid #8294a1; margin-left: 0; padding-left: 1rem; }
+.block { margin-block: 1.5rem; }
+@media (max-width: 35rem) { :root { font-size: 1rem; } body { padding: .75rem; } }

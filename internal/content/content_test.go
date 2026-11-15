@@ -12,6 +12,7 @@ import (
 	"github.com/yuin/goldmark/ast"
 )
 
+// TestExtract проверяет извлечение по текстовым якорям.
 func TestExtract(t *testing.T) {
 	text := "📅 Save the dates!\r\n\r\n  полезное 雪\r\n\r\nСм также: ссылка\r\n"
 	cases := []struct {
@@ -43,6 +44,8 @@ func TestExtract(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestRangesAndImmutability проверяет диапазоны и неизменность исходного документа.
 func TestRangesAndImmutability(t *testing.T) {
 	input := Document{Text: "начало\nтекст\nконец", Spans: []Span{{Start: 0, End: len("начало\nтекст\nконец"), Kind: Link, URL: "https://example.org"}}}
 	before := append([]Span(nil), input.Spans...)
@@ -69,6 +72,8 @@ func TestRangesAndImmutability(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestMarkdown проверяет преобразование форматирования в Markdown.
 func TestMarkdown(t *testing.T) {
 	cases := []struct {
 		doc        Document // Исходные текст и оформление.
@@ -99,7 +104,7 @@ func TestMarkdown(t *testing.T) {
 	}
 }
 
-// utf16Bytes переводит тестовые координаты без Telegram SDK.
+// utf16Bytes переводит диапазон UTF-16 в байтовые координаты UTF-8.
 func utf16Bytes(text string, offset, length int) (int, int, error) {
 	positions := []int{0}
 	for pos, r := range text {
@@ -113,6 +118,8 @@ func utf16Bytes(text string, offset, length int) (int, int, error) {
 	}
 	return positions[offset], positions[offset+length], nil
 }
+
+// TestUTF16 проверяет перевод координат UTF-16.
 func TestUTF16(t *testing.T) {
 	text := "А😀🇰🇷👩‍💻е́雪"
 	start, end, err := utf16Bytes(text, 1, 2)
@@ -123,6 +130,8 @@ func TestUTF16(t *testing.T) {
 		t.Fatal("принята половина суррогатной пары")
 	}
 }
+
+// TestExamples проверяет календарь и региональный справочник.
 func TestExamples(t *testing.T) {
 	for _, name := range []string{"calendar", "directory"} {
 		raw, err := os.ReadFile("testdata/" + name + ".txt")
@@ -193,6 +202,8 @@ func TestExamples(t *testing.T) {
 		}
 	}
 }
+
+// FuzzExtract проверяет извлечение произвольного Unicode-текста.
 func FuzzExtract(f *testing.F) {
 	f.Add("😀\nначало\ntext\nконец", 0, 4)
 	f.Fuzz(func(t *testing.T, text string, start, end int) {
@@ -209,6 +220,8 @@ func FuzzExtract(f *testing.F) {
 		}
 	})
 }
+
+// FuzzMarkdown проверяет обработку произвольных диапазонов форматирования.
 func FuzzMarkdown(f *testing.F) {
 	f.Add("a😀b", 0, 1, "https://example.org")
 	f.Add("a\n\nb", 0, 4, "https://example.org")
@@ -226,6 +239,7 @@ func FuzzMarkdown(f *testing.F) {
 	})
 }
 
+// TestBlocksAndSafeDestinations проверяет границы блоков и безопасность ссылок.
 func TestBlocksAndSafeDestinations(t *testing.T) {
 	for _, kind := range []SpanKind{CodeBlock, Quote} {
 		result, err := ToMarkdown(Document{Text: "<script>\nvalue\n", Spans: []Span{{Start: 0, End: 15, Kind: kind}}})

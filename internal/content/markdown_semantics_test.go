@@ -16,6 +16,7 @@ import (
 	"github.com/yuin/goldmark/text"
 )
 
+// parseMarkdown разбирает полученный Markdown.
 func parseMarkdown(t *testing.T, doc Document) (ast.Node, []byte, string) {
 	t.Helper()
 	result, err := ToMarkdown(doc)
@@ -31,6 +32,8 @@ func parseMarkdown(t *testing.T, doc Document) (ast.Node, []byte, string) {
 	}
 	return root, source, rendered.String()
 }
+
+// visible возвращает видимый текст Markdown.
 func visible(node ast.Node, source []byte) string {
 	var out bytes.Buffer
 	writer := bufio.NewWriter(&out)
@@ -56,6 +59,8 @@ func visible(node ast.Node, source []byte) string {
 	writer.Flush()
 	return stdhtml.UnescapeString(out.String())
 }
+
+// findNodes находит узлы указанного вида в Markdown.
 func findNodes(root ast.Node, kind ast.NodeKind) []ast.Node {
 	var nodes []ast.Node
 	ast.Walk(root, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
@@ -66,6 +71,8 @@ func findNodes(root ast.Node, kind ast.NodeKind) []ast.Node {
 	})
 	return nodes
 }
+
+// TestMarkdownParagraphSemantics проверяет строчное форматирование нескольких абзацев.
 func TestMarkdownParagraphSemantics(t *testing.T) {
 	for _, separator := range []string{"\n\n", "\r\n\r\n", "\n \t\n"} {
 		value := "Первая часть" + separator + "Вторая часть"
@@ -105,6 +112,8 @@ func TestMarkdownParagraphSemantics(t *testing.T) {
 		}
 	}
 }
+
+// TestMarkdownBlockBoundaries проверяет границы цитат и блоков кода.
 func TestMarkdownBlockBoundaries(t *testing.T) {
 	for _, kind := range []SpanKind{Quote, CodeBlock} {
 		for _, includeNewline := range []bool{false, true} {
@@ -131,6 +140,8 @@ func TestMarkdownBlockBoundaries(t *testing.T) {
 		}
 	}
 }
+
+// TestMarkdownSafetyAndText проверяет сохранность текста и безопасность Markdown.
 func TestMarkdownSafetyAndText(t *testing.T) {
 	for _, value := range []string{"雪 👩‍💻 е́ 🇰🇷", "[a]*b*_c_`d` & <script>alert(1)</script>"} {
 		root, source, rendered := parseMarkdown(t, Document{Text: value})
@@ -152,6 +163,7 @@ func TestMarkdownSafetyAndText(t *testing.T) {
 	}
 }
 
+// TestMarkdownNestedAndSequentialBlocks проверяет вложенные и последовательные блоки.
 func TestMarkdownNestedAndSequentialBlocks(t *testing.T) {
 	value := "first\nsecond"
 	root, _, _ := parseMarkdown(t, Document{Text: value, Spans: []Span{{Start: 0, End: len(value), Kind: Link, URL: "https://example.org/a_(b)?q=x&y=z"}, {Start: 0, End: 5, Kind: Bold}, {Start: 6, End: 12, Kind: Italic}}})
@@ -175,6 +187,7 @@ func TestMarkdownNestedAndSequentialBlocks(t *testing.T) {
 	}
 }
 
+// TestMarkdownNestedParagraphsAndUnsafeLinks проверяет вложенные абзацы и опасные ссылки.
 func TestMarkdownNestedParagraphsAndUnsafeLinks(t *testing.T) {
 	value := "Первый абзац\n\nВторой абзац"
 	root, _, _ := parseMarkdown(t, Document{Text: value, Spans: []Span{{Start: 0, End: len(value), Kind: Link, URL: "https://example.org"}, {Start: 0, End: len(value), Kind: Bold}}})

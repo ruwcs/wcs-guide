@@ -1,0 +1,23 @@
+{{define "layout"}}<!doctype html>
+<html lang="{{.Page.Language}}"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Page.Title}}</title>
+{{if .Canonical}}<link rel="canonical" href="{{.Canonical}}">{{end}}
+{{if .Markdown}}<link rel="alternate" type="text/markdown" href="{{.Markdown}}">{{end}}
+{{if .Page.Description}}<meta name="description" content="{{.Page.Description}}">
+<meta property="og:description" content="{{.Page.Description}}">{{end}}
+{{if .Page.MachineContext}}<meta name="wcs-guide:machine-context" content="{{.Page.MachineContext}}">{{end}}
+<meta property="og:title" content="{{.Page.Title}}"><meta property="og:type" content="website">
+<meta property="og:site_name" content="WCS Guide">
+{{if .Canonical}}<meta property="og:url" content="{{.Canonical}}">{{end}}
+<link rel="stylesheet" href="/static/site.css"></head><body>
+<header><a href="/">WCS Guide</a></header><main><article><h1>{{.Page.Title}}</h1>
+{{if .Error}}<p>{{.Error}}</p><p><a href="/">На главную</a></p>{{else}}
+{{range .Blocks}}<div class="block">{{.}}</div>{{end}}
+{{if .Catalog}}<nav aria-label="Материалы"><h2>Материалы</h2><ul>{{range .Catalog}}
+<li><a href="{{.Path}}">{{.Title}}</a>{{if .Description}}<p>{{.Description}}</p>{{end}}</li>{{end}}</ul></nav>{{end}}
+{{if .Sources}}<section><h2>Источники</h2><ul>{{range .Sources}}<li>{{if .ExternalRef}}<a href="{{.ExternalRef}}" rel="noreferrer">{{.SourceName}}</a>{{else}}{{.SourceName}}{{end}}</li>{{end}}</ul></section>{{end}}
+{{if not .Page.UpdatedAt.IsZero}}<p>Актуализировано: <time datetime="{{.Page.UpdatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{.Page.UpdatedAt.Format "2006-01-02 15:04 UTC"}}</time></p>{{end}}
+<p><a href="{{.Markdown}}">Markdown</a></p>{{end}}</article></main>
+<footer>WCS Guide · {{.Version}} · <a href="https://github.com/ruwcs/wcs-guide">Исходный код</a> · <a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0</a></footer>
+</body></html>{{end}}
